@@ -10,6 +10,7 @@ use App\Http\Controllers\ProductBrandController;
 use App\Http\Controllers\SubCategoryController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\UserDetailsController;
+use App\Http\Controllers\TemplateDetailsController;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -56,8 +57,11 @@ Route::post('product/restore/{id}', [ProductController::class, 'restoreProductDi
 
 Route::get('product/author-api', [ProductController::class, 'authorDataApi']);
 
+Route::post('template-name/save', [TemplateDetailsController::class, 'saveTemplateData']);
 
-Route::post('user-details/save', [UserDetailsController::class, 'storeUserTempleteDetails']);
+Route::post('template/name-field/save', [TemplateDetailsController::class, 'saveTemplateNameFields']);
+
+Route::post('template/payload/save', [TemplateDetailsController::class, 'getTemplatePayloadDetails']);
 
 
 
