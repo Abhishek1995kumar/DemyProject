@@ -1,0 +1,13 @@
+{
+    "template_id": 4,
+    "payload": {
+        "vendor_name": "abhishek",
+        "vendor_shop_name": "aryan",
+        "vendor_contact": "9785446432",
+        "vendor_email": "anandsa@gmail.com",
+        "vendor_address": "sfdhjgs",
+        "vendor_landmark": "fskjoihfs",
+        "vendor_address_proof": "fdighywr",
+        "vendor_fax": "eryutwervsd"
+    }
+}

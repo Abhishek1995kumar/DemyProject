@@ -136,16 +136,3 @@
 //     ]
 // }
 
-
-''
-'orgnization details'
-'hospital details'
-'college details'
-'cricket team details'
-'flight details'
-'train details'
- 'vendor details'
- 'user details'
- 'admin details'
- 'smart market details'
- 'e-com bazaar details'
