@@ -17,14 +17,6 @@ class TemplateName extends Model {
         return $this->hasMany(TemplateFields::class, 'template_name_id', 'id');
     }
 
-    public function validationDetails() {
-        return $this->hasOne(Validation::class, 'validation_id', 'id');
-    }
-
-    public function dataTypeDetails() {
-        return $this->hasOne(DataType::class, 'data_type_id', 'id');
-    }
-
     // protected $casts = [
     //     'field_name' => 'array', // whenever we want to use to store data as a json/array form in table than we used $casts method in model class 
     // ];

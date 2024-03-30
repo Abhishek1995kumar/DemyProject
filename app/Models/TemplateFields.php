@@ -17,4 +17,13 @@ class TemplateFields extends Model {
        return $this->hasOne(TemplateName::class, 'template_name_id', 'id');
     }
 
+    
+    public function validationDetails() {
+        return $this->belongsTo(Validation::class, 'validation_id', 'id');
+    }
+
+    public function dataTypeDetails() {
+        return $this->belongsTo(DataType::class, 'data_type_id', 'id');
+    }
+
 }
