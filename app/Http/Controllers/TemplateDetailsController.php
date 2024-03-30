@@ -15,7 +15,7 @@ class TemplateDetailsController extends Controller {
         try {
             $rules = [
                 'template_name' => 'required',
-                'data.*.validation_id' =>'required|exists:validations,id', // when i want to send multiple data in databse and that time we need to check validation than use this method
+                'data.*.validation_id' =>'required|exists:validations,id', // when i want to send multiple data in databse on that time we need to check validation, this reason we use this method
                 'data.*.data_type_id'  =>'required|exists:data_types,id', // we getting data from postman 
                 'data.*.field_name'    =>'required',   // * -- mean indexing, Indexing the records in the data where I am setting
                 'data.*.is_mandatory'  =>'required',
@@ -198,5 +198,74 @@ class TemplateDetailsController extends Controller {
         }
     }
 
+
+    public function updateTemplateNameField(Request $request) {
+        // try{
+            $rules = [
+                'id' => 'required|exists:template_names,id',
+            ];
+
+            $messages = [
+                'id.required' => 'Template id field is required, please manually check the template id',
+                'id' => 'Provided template id does not exist in database, please provide valid template id',
+            ];
+
+            $validator = Validator::make($request->all(), $rules, $messages);
+
+            if($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors()
+                ]);
+            } else {
+                $templateDetails = TemplateName::where('id', $request->id)->with('templateField')->first();
+
+                if ($templateDetails) {
+                    if ($request->has('payload')) {
+                        $templateFieldNames = $templateDetails->templateField->pluck('field_name')->toArray();
+                        $payloadFields = collect($request->payload);
+                        
+                        $newFields = $payloadFields->filter(function ($payloadField) use ($templateFieldNames) {
+                            return !in_array($payloadField['field_name'], $templateFieldNames);
+                        });
+
+                        // $newFields->each(function ($newField) use ($templateDetails) {
+                        //     $templateField = new TemplateFields();
+                        //     $templateField->template_name_id = $templateDetails->id;
+                        //     $templateField->field_name = $newField['field_name'];
+                        //     $templateField->validation_id = $newField['validation_id']; 
+                        //     $templateField->data_type_id = $newField['data_type_id'];
+                        //     $templateField->save();
+                        // });
+
+                        foreach($newFields as $value) {
+                            $templateField = new TemplateFields();
+                            $templateField->template_name_id = $templateDetails->id;
+                            foreach($value as $field) {
+                                $templateField->field_name = $value['field_name'];
+                                $templateField->validation_id = $value['validation_id'];
+                                $templateField->data_type_id = $value['data_type_id'];
+                                $templateField->is_mandatory = $value['is_mandatory'];
+                                $templateField->status = 1;
+                                $templateField->created_at = now();
+                                $templateField->updated_at = now();
+                            }
+                            $templateField->save();
+                        }
+
+                        return response()->json([
+                            'status' => true,
+                            'message' => 'Template field is updated successfully', 
+                        ]);
+                    }
+                }
+            }
+        // } catch(Exception $e) {
+        //     return response()->json([
+        //         'status' => false,
+        //         'errors' => $e->getMessage()
+        //     ]);
+        // }
+    }
 
 }

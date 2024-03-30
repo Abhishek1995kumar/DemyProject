@@ -57,12 +57,12 @@ Route::post('product/restore/{id}', [ProductController::class, 'restoreProductDi
 
 Route::get('product/author-api', [ProductController::class, 'authorDataApi']);
 
-Route::post('template-name/save', [TemplateDetailsController::class, 'saveTemplateData']);
 
 Route::post('template/name-field/save', [TemplateDetailsController::class, 'saveTemplateNameFields']);
 
 Route::post('template/payload/save', [TemplateDetailsController::class, 'getTemplatePayloadDetails']);
 
+Route::post('template/name-field/update', [TemplateDetailsController::class, 'updateTemplateNameField']);
 
 
 
