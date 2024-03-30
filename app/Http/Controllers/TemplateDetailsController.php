@@ -229,15 +229,6 @@ class TemplateDetailsController extends Controller {
                             return !in_array($payloadField['field_name'], $templateFieldNames);
                         });
 
-                        // $newFields->each(function ($newField) use ($templateDetails) {
-                        //     $templateField = new TemplateFields();
-                        //     $templateField->template_name_id = $templateDetails->id;
-                        //     $templateField->field_name = $newField['field_name'];
-                        //     $templateField->validation_id = $newField['validation_id']; 
-                        //     $templateField->data_type_id = $newField['data_type_id'];
-                        //     $templateField->save();
-                        // });
-
                         foreach($newFields as $value) {
                             $templateField = new TemplateFields();
                             $templateField->template_name_id = $templateDetails->id;
