@@ -11,3 +11,87 @@
         "vendor_fax": "eryutwervsd"
     }
 }
+
+
+
+
+
+// add template field payload 
+{
+    "id" : 4,
+    "payload" : [
+        {
+            "validation_id" : 1,
+            "data_type_id" : 1,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_name"
+        },
+        {
+            "validation_id" : 1,
+            "data_type_id" : 1,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_shop_name"
+        },
+        {
+            "validation_id" : 1,
+            "data_type_id" : 1,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_contact"
+        },
+        {
+            "validation_id" : 1,
+            "data_type_id" : 8,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_email"
+        },
+        {
+            "validation_id" : 1,
+            "data_type_id" : 8,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_address"
+        },
+        {
+            "validation_id" : 6,
+            "data_type_id" : 2,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_landmark"
+        },
+        {
+            "validation_id" : 6,
+            "data_type_id" : 2,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_account"
+        },
+        {
+            "validation_id" : 6,
+            "data_type_id" : 2,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_pancard"
+        },
+        {
+            "validation_id" : 6,
+            "data_type_id" : 2,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_aadharcard"
+        },
+        {
+            "validation_id" : 6,
+            "data_type_id" : 2,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_driving_license"
+        },
+        {
+            "validation_id" : 6,
+            "data_type_id" : 2,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_address_proof"
+        },
+        {
+            "validation_id" : 6,
+            "data_type_id" : 2,
+            "is_mandatory" : 1,
+            "field_name" : "vendor_fax"
+        }
+    ]
+}
+

@@ -90,6 +90,114 @@ class TemplateDetailsController extends Controller {
         }
     }
 
+    public function updateTemplateNameField(Request $request) {
+        try{
+            $rules = [
+                // 'id' => 'required|exists:template_names,id',
+            ];
+
+            $messages = [
+                'id.required' => 'Template id field is required, please manually check the template id',
+                'id' => 'Provided template id does not exist in database, please provide valid template id',
+            ];
+
+            $validator = Validator::make($request->all(), $rules, $messages);
+
+            if($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors()
+                ]);
+            } else {
+
+                // $templateDetails = TemplateName::when($request->has('template_id'), function($query) use ($request) {
+                //     $query->whereHas('templateField', function($q) use ($request) {
+                //         $q->where('template_name_id', $request->template_id);
+                //     });
+                // })->with('templateField')->first();
+
+                $templateDetails = TemplateName::where('id', $request->id)->with('templateField')->first();
+
+                if ($templateDetails) {
+                    if ($request->has('payload')) {
+                        $templateFieldNames = $templateDetails->templateField->pluck('field_name')->toArray();
+
+                        $payloadFields = collect($request->payload);
+                        $deletePluckedDetails = $payloadFields->pluck('field_name')->toArray();
+
+                        $newFields = $payloadFields->filter(function ($payloadField) use ($templateFieldNames) {
+                            return !in_array($payloadField['field_name'], $templateFieldNames);
+                        });
+
+                        $deffierenceFieldDatabase = array_diff($templateFieldNames, $deletePluckedDetails);
+
+                        if(!empty($deffierenceFieldDatabase)) {
+                            $del = TemplateFields::where('template_name_id', $request->id)
+                                        ->whereIn('field_name', $deffierenceFieldDatabase)->get(); // whereIn -- jab data as a array/collection me ho tab ham whereIn ka use karte hai
+                            $del->delete();
+
+                        }
+
+                        // $deleteTemplateFields = TemplateFields::where('template_name_id', $request->id)->select('validation_id','data_type_id', 'is_mandatory', 'field_name')->get();
+
+                        // $deletedValue = [];
+                        // foreach ($deleteTemplateFields as $deleteField) {
+                        //     $deletedValue[] = $deleteField->field_name;
+                        // }
+
+                        // $payloadFieldCollection = [];
+                        // foreach($payloadFields as $pay) {
+                        //     $payloadFieldCollection[] = $pay['field_name'];
+                        // }
+
+                        // if($deletedValue != $payloadFields) {
+                        //     $defferenceField = array_diff($payloadFieldCollection, $deletedValue);
+                        //     $del = TemplateFields::where('field_name', $defferenceField);
+                        //     return $del;
+                        // }
+
+                        foreach($newFields as $value) {
+                            $templateField = new TemplateFields();
+                            $templateField->template_name_id = $templateDetails->id;
+                            foreach($value as $field) {
+                                $templateField->field_name = $value['field_name'];
+                                $templateField->validation_id = $value['validation_id'];
+                                $templateField->data_type_id = $value['data_type_id'];
+                                $templateField->is_mandatory = $value['is_mandatory'];
+                                $templateField->status = 1;
+                                $templateField->created_at = now();
+                                $templateField->updated_at = now();
+                            }
+                            $templateField->save();
+
+                        }
+
+                        return response()->json([
+                            'status' => true,
+                            'message' => 'Template field is updated successfully', 
+                        ]);
+                    } else {
+
+                        // return response()->json([
+                        //    'status' => false,
+                        //    'message' => 'Payload field is required',
+                        // ]);
+                    }
+                } else {
+                    return response()->json([
+                       'status' => false,
+                       'message' => 'Template id is not found, please you can check template id is manually.',
+                    ]);
+                }
+            }
+        } catch(Exception $e) {
+            return response()->json([
+                'status' => false,
+                'errors' => $e->getMessage()
+            ]);
+        }
+    }
+
 
     public function getTemplatePayloadDetails(Request $request) {
         try{
@@ -199,64 +307,5 @@ class TemplateDetailsController extends Controller {
     }
 
 
-    public function updateTemplateNameField(Request $request) {
-        // try{
-            $rules = [
-                'id' => 'required|exists:template_names,id',
-            ];
-
-            $messages = [
-                'id.required' => 'Template id field is required, please manually check the template id',
-                'id' => 'Provided template id does not exist in database, please provide valid template id',
-            ];
-
-            $validator = Validator::make($request->all(), $rules, $messages);
-
-            if($validator->fails()) {
-                return response()->json([
-                    'status' => false,
-                    'errors' => $validator->errors()
-                ]);
-            } else {
-                $templateDetails = TemplateName::where('id', $request->id)->with('templateField')->first();
-
-                if ($templateDetails) {
-                    if ($request->has('payload')) {
-                        $templateFieldNames = $templateDetails->templateField->pluck('field_name')->toArray();
-                        $payloadFields = collect($request->payload);
-                        
-                        $newFields = $payloadFields->filter(function ($payloadField) use ($templateFieldNames) {
-                            return !in_array($payloadField['field_name'], $templateFieldNames);
-                        });
-
-                        foreach($newFields as $value) {
-                            $templateField = new TemplateFields();
-                            $templateField->template_name_id = $templateDetails->id;
-                            foreach($value as $field) {
-                                $templateField->field_name = $value['field_name'];
-                                $templateField->validation_id = $value['validation_id'];
-                                $templateField->data_type_id = $value['data_type_id'];
-                                $templateField->is_mandatory = $value['is_mandatory'];
-                                $templateField->status = 1;
-                                $templateField->created_at = now();
-                                $templateField->updated_at = now();
-                            }
-                            $templateField->save();
-                        }
-
-                        return response()->json([
-                            'status' => true,
-                            'message' => 'Template field is updated successfully', 
-                        ]);
-                    }
-                }
-            }
-        // } catch(Exception $e) {
-        //     return response()->json([
-        //         'status' => false,
-        //         'errors' => $e->getMessage()
-        //     ]);
-        // }
-    }
 
 }
