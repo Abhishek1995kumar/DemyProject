@@ -1,0 +1,13 @@
+														Error Sheet
+1) Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException: The GET method is not supported for route api/admin/login. Supported methods: POST. in file C:\Users\Solv-IT\Documents\eb-backend\vendor\laravel\framework\src\Illuminate\Routing\AbstractRouteCollection.php on line 122
+
+#0 C:\Users\Solv-IT\Documents\eb-backend\vendor\laravel\framework\src\Illuminate\Routing\AbstractRouteCollection.php(107): Illuminate\Routing\AbstractRouteCollection-&gt;requestMethodNotAllowed(Object(Illuminate\Http\Request), Array, &#039;GET&#039;)
+#1 C:\Users\Solv-IT\Documents\eb-backend\vendor\laravel\framework\src\Illuminate\Routing\AbstractRouteCollection.php(41): Illuminate\Routing\AbstractRouteCollection-&gt;getRouteForMethods(Object(Illuminate\Http\Request), Array)
+#2 C:\Users\Solv-IT\Documents\eb-backend\vendor\laravel\framework\src\Illuminate\Routing\RouteCollection.php(162): Illuminate\Routing\AbstractRouteCollection-&gt;handleMatchedRoute(Object(Illuminate\Http\Request), NULL)
+#3 C:\Users\Solv-IT\Documents\eb-backend\vendor\laravel\framework\src\Illuminate\Routing\Router.php(753): Illuminate\Routing\RouteCollection-&gt;match(Object(Illuminate\Http\Request))														
+
+Answer) 
+	405 error code -- when we didn't defined authentication token in postman but we have to create route inside middleware 
+					So if you create your route inside middleware route than must be use authentication token in postman
+					agar ham apna koi route middleware route ke undar create kar rhe hai tab postman me authentication token dena 
+					jaruri hota hai

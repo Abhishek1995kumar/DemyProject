@@ -1,0 +1,52 @@
+select * from products where exists (select * from categories where products.category_id = categories.id and
+categories.id like 1) and products.deleted_at is null;
+
+    public function showProduct(Request $request) {
+        // return Product::when($request->has('product_min_price','product_max_price'), function ($query) use ($request) {
+        //     $query->whereBetween('product_price', [$request->product_min_price, $request->product_max_price]);
+        // })
+
+        $categoryDetails = Product::when($request->has('category_id'), function ($query) use ($request) {
+                                $query->whereHas('category', function ($q) use ($request) {
+                                    $q->where('id', $request->category_id);
+                                });
+                            })->with('category')
+
+                            ->when($request->has('product_min_price','product_max_price'), function ($query) use ($request) {
+                                $query->whereBetween('product_price', [$request->product_min_price, $request->product_max_price]);
+                            })
+                            // ->with('category:id,category_name,category_slug', 'category.subCategory:id,category_id,sub_category_name,sub_category_slug')
+
+                            ->when($request->has('sub_category_id'), function ($query) use ($request) {
+                                $query->whereHas('subCategory', function ($q) use ($request) {
+                                    $q->where('sub_category_id', $request->sub_category_id);
+                                });
+                            })
+                            // ->with('subCategory:id,category_id,sub_category_name,sub_category_slug', 'subCategory.categorySub:id,category_name,category_slug,tax')
+                            ->with('subCategory.categorySub')
+
+                            ->when($request->has('brand_id'), function($query) use ($request) {
+                                $query->where('brand_id', $request->brand_id);
+                            })
+                            // ->with('brand:id,brand_name,description')
+                            ->with('brand')
+
+                            ->when($request->has('stock'), function($query) use ($request) {
+                                $query->whereHas('stocks', function($row) use ($request) {
+                                    // $row->where('total_product_quantity', '>', 0);
+                                    if($request->stock > 0) {
+                                        $row->where('total_product_quantity', $request->stock);
+                                    } else {
+                                        $row->where('total_product_quantity', $request->stock); 
+                                    }
+                                });
+                            })->with('stocks')->get();
+
+        return response()->json([
+            'status' => 'success',
+            // 'message' => 'Product was successfully fetched',
+            'data' => ProductResource::collection($categoryDetails)
+        ]);
+    }
+
+

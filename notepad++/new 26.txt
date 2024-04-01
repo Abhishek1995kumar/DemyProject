@@ -1,0 +1,55 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use DB;
+use App\User;
+use Throwable;
+use Exception;
+use Illuminate\Http\Request;
+use App\Traits\PasswordTrait;
+use Illuminate\Support\Facades\Log;
+class DefaultPasswordController extends Controller {
+    use PasswordTrait;
+    public function downloadSampleExcelPassword(Request $request) {
+        try{
+            return response()->json([
+                'status'=> true, 
+                'data'  => $this->sampleExcelPassword($request)
+            ]);
+        }catch(Exception $e){
+            return response()->json([
+                'status' => false, 
+                'message'=> "function failed !!",
+            ]);
+        }
+    }
+
+    public function uploadDefaultPasswordExcel(Request $request){
+        try{
+            return response()->json([
+                'status'=> true, 
+                'data'  => $this->uploadPassword($request)
+            ]);
+        }catch(Exception $e){
+            return response()->json([
+                'status' => false, 
+                'message'=> "function failed !!",
+            ]);
+        }
+    }
+
+    public function singleDefaultPassword(Request $request) {
+        try{
+            return response()->json([
+                'status'=> true, 
+                'data'  => $this->singlePassword($request)
+            ]);
+        }catch(Exception $e){
+            return response()->json([
+                'status' => false, 
+                'message'=> "function failed !!",
+            ]);
+        }
+    }
+}

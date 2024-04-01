@@ -1,0 +1,60 @@
+https://stackoverflow.com/questions/60240447/laravel-6-artisan-make-traits-custom-command-not-working
+
+https://stackoverflow.com/questions/72913577/use-trait-on-eloquant-query-result
+
+https://spatie.be/docs/laravel-activitylog/v4/advanced-usage/logging-model-events
+
+https://stackoverflow.com/questions/2342579/http-status-code-for-update-and-delete
+
+<?php
+
+namespace App\Http\Controllers;
+use Illuminate\Http\Request;
+use App\Traits\PasswordTrait;
+
+
+class PasswordController extends Controller {
+    // use PasswordTrait;
+    // public function downloadSampleExcelPassword($request) {
+    //     return $this->sampleExcelPassword($request);
+    // } 
+
+    // public function uploadDefaultPasswordExcel(Request $request){
+    //     return $this->uploadPassword($request);
+    // }
+
+    // public function singleDefaultPassword(Request $request) {
+    //     return $this->singlePassword($request);
+    // }
+}
+
+
+
+
+
+
+
+
+
+Default Password -->
+	1) create migration file for master_default_password --- for sample generate  -- 2hrs
+	
+	2) create migration file for dump_default_password -- for upload excel sheet  -- 1hrs for some changing
+	
+	3) create migration file for excel_error_sheet -- for getting error           -- 1hrs for new create
+	
+	4) create controller for upload excel										  -- 4days
+	
+	5) create controller for sample download 									  -- 2days
+	
+	6) create model file for masterDefaultPassword								  -- 2hrs
+	
+	7) create model file for dumpDefaultPassword								  -- 3hrs
+	
+	8) create export file for download excel sheet using maatwebsite			  -- 2days
+	
+	9) create import file for upload excel sheet using maatwebsite				  -- 1days
+	
+	10) create ExcelError for error job 										  -- pending
+	
+	11) create job for success 													  -- pending

@@ -1,0 +1,91 @@
+{
+    "id": 907,
+    "user_id": 952,
+    "employer_id": 9,
+    "code": "E00300997",
+    "doj": "2021-01-01",
+    "dob": "1987-01-01",
+    "user": {
+        "id": 952,
+        "master_user_types_id": 5,
+        "user_unique_id": null,
+        "name": "MDF1SUJVc1BVQTg1NUg2aUJrSjNCUT09",
+        "email": "EMP003@fyntune.com",
+        "default_password": "Test@100",
+    }
+}
+
+        // $data = DumpDefaultPassword::with('employeeTable.user')->get();
+        $code = DumpDefaultPassword::where('employer_id', $request->employer_id)->pluck('employee_code')->toArray();
+        $employerId = DumpDefaultPassword::where('employer_id', $request->employer_id)->pluck('employer_id')->toArray();
+        $masterEmployee = MasterEmployees::with('user')->whereIn('code', $code)->whereIn('employer_id', $employerId)->first();
+        $data = [];
+        foreach ($masterEmployee as $key=>$item) {
+            $data[$key] = $item->code;
+            $data[$key] = $item->doj;
+            $data[$key] = $item->dob;
+            $data[$key] = $item->user->name;
+            $data[$key] = $item->user->default_password;
+            return $data;
+        }
+		
+        // $data = DumpDefaultPassword::with('employeeTable.user')->get();
+        $code = DumpDefaultPassword::where('employer_id', $request->employer_id)->pluck('employee_code')->toArray();
+        $employerId = DumpDefaultPassword::where('employer_id', $request->employer_id)->pluck('employer_id')->toArray();
+        $masterEmployee = MasterEmployees::with('user')->whereIn('code', $code)->whereIn('employer_id', $employerId)->first();
+        $data = [];
+        foreach ($masterEmployee as $key=>$item) {
+            $data[$key] = $item->code;
+            $data[$key] = $item->doj;
+            $data[$key] = $item->dob;
+            $data[$key] = $item->user->name;
+            $data[$key] = $item->user->default_password;
+            return $data;
+        }
+		
+	        $data = DumpDefaultPassword::with('employeeTable.user')->get();
+        $userIds = [];
+        foreach ($data as $key=>$item) {
+            $userIds = $item->default_password;
+            foreach ($item->employeeTable as $employee) {
+                $employee->user->default_password = $userIds;
+                User::where("id", $employee->user_id)->update(['default_password'=>$data]);
+            }
+        }
+		
+		
+
+        
+
+        // $DumpDefaultPasswordTable = ;
+        // $code = [];
+        // foreach($DumpDefaultPasswordTable as $key => $val){
+        //     try{
+        //         $code[$key] = $val->employee_code;
+        //     }catch(\Exception $e){
+        //         $data[$key] = '';
+        //     }
+        // }
+        // $pass = [];
+        // foreach($DumpDefaultPasswordTable as $key => $val){
+        //     try{
+        //         $pass[$key] = $val->default_password;
+        //     }catch(\Exception $e){
+        //         $pass[$key] = '';
+        //     }
+        // }
+        // $empId = [];
+        // foreach($DumpDefaultPasswordTable as $key => $val){
+        //     try{
+        //         $empId[$key] = $val->employer_id;
+        //     }catch(\Exception $e){
+        //         $empId[$key] = '';
+        //     }
+        // }
+		// $data = [];
+        // foreach($getEmp as $key => $val){
+        //     $data[$key] = $val->employee_id;
+        //     // $data[$key] = $val->default_password;
+        //     // $da = DumpDefaultPassword::where(['employee_code'=>$val->employee_code, 'default_password'=>$val->default_password])->get();
+        //     // $data[] = $da;
+        // }

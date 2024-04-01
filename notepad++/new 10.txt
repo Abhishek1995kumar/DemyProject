@@ -1,0 +1,32 @@
+									Configurator API
+
+1) http://127.0.0.1:8000/api/admin/masterDefaultPassword -- 1st API 
+								Requirment -- Authentication Token 
+											dropdown for Default Password Format
+
+
+
+2) http://127.0.0.1:8000/api/admin/saveDefaultPasswordDetails
+				Requirment -- Authentication Token 
+								employer_id
+								default_password_format_id
+								
+								
+
+3) http://127.0.0.1:8000/api/admin/showDefaultPasswordDetails
+				Requirment -- Authentication Token 
+							
+							
+							
+							
+4) http://127.0.0.1:8000/api/admin/updateEmployerDefaultPasswordDetails/3
+				Requirment -- Authentication Token 
+								employer_id
+								default_password_format_id
+								
+								
+								
+5) http://127.0.0.1:8000/api/admin/deleteEmployerDefaultPasswordDetails/3
+				Requirment -- Authentication Token 
+
+

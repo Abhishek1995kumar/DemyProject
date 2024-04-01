@@ -1,0 +1,47 @@
+<?php
+
+namespace App\Jobs;
+
+use App\User;
+use Throwable;
+use Exception;
+use Illuminate\Bus\Queueable;
+use App\Models\MasterEmployee;
+use App\Models\MasterEmployees;
+use App\Models\MasterEmployers;
+use App\Models\ExcelErrorReports;
+use Illuminate\Support\Facades\DB;
+use App\Models\DumpDefaultPassword;
+use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Storage;
+use App\Exports\DefaultExcelErrorExport;
+use Illuminate\Queue\InteractsWithQueue;
+use App\Exports\UserLoginModeErrorExport;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
+class DefaultPasswordJob implements ShouldQueue {
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    public $chunkValue, $employerId, $defaultPasswordFormatId, $errorReportId;
+    public function __construct($chunk_value, $employer_id, $default_password_formatId, $errorReportId) {
+        // dd($this->employerId); // ye as a ek var count hoga iss liye yaha par ye null aayega
+        $this->chunkValue = $chunk_value;
+        $this->employerId = $employer_id;
+        $this->defaultPasswordFormatId = $default_password_formatId;
+        $this->errorReportId = $errorReportId;
+
+        ini_set('memory_limit','-1');
+        ini_set('max_execution_time',0);
+        set_time_limit(0);
+        // dd('hello');
+        // dd($this->chunkValue, $this->employerId, $this->defaultPasswordFormatId, $this->errorReportId);
+    }
+    
+    
+    public function handle() {
+        dd('hello');
+    }
+}

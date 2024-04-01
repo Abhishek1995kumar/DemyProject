@@ -1,0 +1,97 @@
+MYSQL-> CODE_EDITOR 
+
+
+    <!-- This is the base language setting. It's usually not directly used, but provides values shared by
+         more specialized MySQL versions. -->
+    
+    <!-- Lexer properties -->
+    <property name="fold" value="1" />
+    <property name="fold.compact" value="0" />
+    <property name="fold.comment" value="1" />
+
+    <!-- Editor settings -->
+    <setting name="usetabs" value="1" />
+    <setting name="tabwidth" value="4" />
+    <setting name="indentation" value="4" />
+
+    <!-- Keep in mind to use the same list names as defined in the lexers (e.g. LexMySQL.cpp). -->
+    <keywords name="Major Keywords">
+      <!-- Keywords that can start a statement. No longer used. -->
+    </keywords>
+
+    <keywords name="Keywords">
+      <!-- Normal keywords. No longer kept here but come from the keywords_list.h file provided by the server itself. -->
+    </keywords>
+
+    <keywords name="Procedure keywords">
+      begin end comment
+    </keywords>
+
+    <keywords name="User Keywords 1">
+      delimiter
+    </keywords>
+
+    <!-- These two lists are not used for syntax highlighting but assemble keywords from the other lists that serve a special purpose. -->
+    <keywords name="User Keywords 2"> <!-- Keywords that are allowed at the start of an expression. -->
+      binary case cast convert exists interval match not row
+    </keywords>
+
+    <keywords name="User Keywords 3"> <!-- Like user 2 but those that can appear between two expressions. -->
+      all and any as between escape false in is like or regexp sounds true unknown xor
+    </keywords>
+    
+    <style id="0" fore-color-light="#284444" fore-color-dark="#808a8c" /> <!-- SCE_MYSQL_DEFAULT -->
+
+    <style id="1" fore-color-light="#0987cb" fore-color-dark="#0a99e5" /> <!-- SCE_MYSQL_COMMENT -->
+    <style id="2" fore-color-light="#0987cb" fore-color-dark="#0a99e5" /> <!-- SCE_MYSQL_COMMENTLINE -->
+    <style id="21" back-color-light="#F0F0F0" back-color-dark="#404040" /> <!-- SCE_MYSQL_HIDDENCOMMAND -->
+
+    <style id="3" fore-color-light="#63bf8d" fore-color-dark="#63bf8d" /> <!-- SCE_MYSQL_VARIABLE -->
+    <style id="4" fore-color-light="#45aa73" fore-color-dark="#45aa73" /> <!-- SCE_MYSQL_SYSTEMVARIABLE -->
+    <style id="5" fore-color-light="#45aa73" fore-color-dark="#45aa73" /> <!-- SCE_MYSQL_KNOWNSYSTEMVARIABLE -->
+
+    <style id="6" fore-color-light="#cc6c00" fore-color-dark="#e57a00" /> <!-- SCE_MYSQL_NUMBER -->
+    <style id="12" fore-color-light="#dd7a00" fore-color-dark="#f28600" /> <!-- SCE_MYSQL_SQSTRING -->
+    <style id="13" fore-color-light="#dd7a00" fore-color-dark="#f28600" /> <!-- SCE_MYSQL_DQSTRING -->
+
+    <style id="7" bold="Yes" fore-color-light="#007FBF" /> <!-- SCE_MYSQL_MAJORKEYWORD -->
+    <style id="8" bold="Yes" fore-color-light="#007FBF" /> <!-- SCE_MYSQL_KEYWORD -->
+    <style id="15" fore-color-light="#7d7d63" fore-color-dark="#7db27d" /> <!-- SCE_MYSQL_FUNCTION -->
+    <style id="10" fore-color-light="#7d7d63" fore-color-dark="#7db27d" /> <!-- SCE_MYSQL_PROCEDUREKEYWORD -->
+    <style id="14" bold="Yes" /> <!-- SCE_MYSQL_OPERATOR -->
+
+    <style id="16" fore-color-light="#000000" fore-color-dark="#FFFFFF" /> <!-- SCE_MYSQL_IDENTIFIER -->
+    <style id="17" fore-color-light="#993a3e" fore-color-dark="#e5454c" /> <!-- SCE_MYSQL_QUOTEDIDENTIFIER -->
+
+    <style id="22" fore-color-light="#FFFFFF" back-color-light="#A0A0A0" fore-color-dark="#000000" back-color-dark="#404040" bold="Yes" /> <!-- SCE_MYSQL_PLACEHOLDER -->
+
+    <style id="18" fore-color-light="#007F00" fore-color-dark="#00b200" bold="yes"/> <!-- SCE_MYSQL_USER1 -->
+
+    <!-- All styles again in their variant in a hidden command (with a 0x40 offset). -->
+    <style id="65" fore-color-light="#0987cb" back-color-light="#F0F0F0" fore-color-dark="#0a99e5" back-color-dark="#404040" /> <!-- SCE_MYSQL_COMMENT -->
+    <style id="66" fore-color-light="#0987cb" back-color-light="#F0F0F0" fore-color-dark="#0a99e5" back-color-dark="#404040" /> <!-- SCE_MYSQL_COMMENTLINE -->
+
+    <style id="67" fore-color-light="#63bf8d" back-color-light="#F0F0F0" fore-color-dark="#63bf8d" back-color-dark="#404040" /> <!-- SCE_MYSQL_VARIABLE -->
+    <style id="68" fore-color-light="#45aa73" back-color-light="#F0F0F0" fore-color-dark="#45aa73" back-color-dark="#404040" /> <!-- SCE_MYSQL_SYSTEMVARIABLE -->
+    <style id="69" fore-color-light="#45aa73" back-color-light="#F0F0F0" fore-color-dark="#45aa73" back-color-dark="#404040" /> <!-- SCE_MYSQL_KNOWNSYSTEMVARIABLE -->
+
+    <style id="70" fore-color-light="#cc6c00" back-color-light="#F0F0F0" fore-color-dark="#e57a00" back-color-dark="#404040" /> <!-- SCE_MYSQL_NUMBER -->
+    <style id="76" fore-color-light="#dd7a00" back-color-light="#F0F0F0" fore-color-dark="#f28600" back-color-dark="#404040" /> <!-- SCE_MYSQL_SQSTRING -->
+    <style id="77" fore-color-light="#dd7a00" back-color-light="#F0F0F0" fore-color-dark="#f28600" back-color-dark="#404040" /> <!-- SCE_MYSQL_DQSTRING -->
+
+    <style id="71" back-color-light="#F0F0F0" back-color-dark="#404040" bold="Yes" /> <!-- SCE_MYSQL_MAJORKEYWORD -->
+    <style id="72" back-color-light="#F0F0F0" back-color-dark="#404040" bold="Yes"/> <!-- SCE_MYSQL_KEYWORD -->
+    <style id="79" fore-color-light="#7d7d63" back-color-light="#F0F0F0" fore-color-dark="#7db27d" back-color-dark="#404040" /> <!-- SCE_MYSQL_FUNCTION -->
+    <style id="74" fore-color-light="#7d7d63" back-color-light="#F0F0F0" fore-color-dark="#7db27d" back-color-dark="#404040" /> <!-- SCE_MYSQL_PROCEDUREKEYWORD -->
+    <style id="78" back-color-light="#F0F0F0" back-color-dark="#284444" bold="Yes" /> <!-- SCE_MYSQL_OPERATOR -->
+
+    <style id="80" fore-color-light="#000000" back-color-light="#F0F0F0" fore-color-dark="#FFFFFF" back-color-dark="#404040" /> <!-- SCE_MYSQL_IDENTIFIER -->
+    <style id="81" fore-color-light="#993a3e" back-color-light="#F0F0F0" fore-color-dark="#e5454c" back-color-dark="#404040" /> <!-- SCE_MYSQL_QUOTEDIDENTIFIER -->
+
+    <style id="86" fore-color-light="#FFFFFF" back-color-light="#A0A0A0" fore-color-dark="#284444" back-color-dark="#404040" bold="Yes" /> <!-- SCE_MYSQL_PLACEHOLDER -->
+
+    <style id="82" fore-color-light="#007F00" back-color-light="#F0F0F0" fore-color-dark="#00b200" back-color-dark="#404040" bold="yes"/> <!-- SCE_MYSQL_USER1 -->
+
+    <!-- Various other styles -->
+    <style id="34" back-color-light="#ffee55" back-color-dark="#ffee55" /> <!-- STYLE_BRACELIGHT -->
+    <style id="35" back-color-light="#ff7855" back-color-dark="#ff7855" /> <!-- STYLE_BRACELBAD -->

@@ -1,0 +1,1370 @@
+    public function handle()
+    {
+        try {
+            ini_set('memory_limit', '-1');
+            ini_set('max_execution_time', 0);
+            set_time_limit(0);
+
+            $cronLog = NULL;
+
+            $dataDump = [];
+
+            $policyData = MasterPolicy::whereId($this->policyId)->with('ageDetails', 'rates')->first();
+
+            //if Data is Already computed then no need to validate again
+            if (!$this->isComputed) {
+
+                if ($this->isSmallJob) {
+                    $dataDump = EndrosementDataDump::where('excel_report_id', $this->excelReportId)
+                        ->when($this->partialProcess, fn ($q) => $q->where('dont_process', 0))
+                        ->orderBy('id')
+                        ->get();
+                } else {
+                    if ($this->isSelfChunk) {
+                        $dataDump = EndrosementDataDump::where('excel_report_id', $this->excelReportId)
+                            ->where('relation_id', 1)
+                            ->when($this->partialProcess, fn ($q) => $q->where('dont_process', 0))
+                            ->orderBy('id')
+                            ->offset($this->offset)
+                            ->limit($this->batchSize)
+                            ->get();
+                    } else {
+                        $dataDump = EndrosementDataDump::where('excel_report_id', $this->excelReportId)
+                            ->where('relation_id', '!=', 1)
+                            ->when($this->partialProcess, fn ($q) => $q->where('dont_process', 0))
+                            ->orderBy('id')
+                            ->offset($this->offset)
+                            ->limit($this->batchSize)
+                            ->get();
+                    }
+                }
+
+
+                $dataDumpToProcess = $dataDump->where('is_processed', 0);
+
+                $dataDumpToValidate = $dataDump->where('is_validated', 0);
+
+                if (Portal::check(Portal::EMPLOYEE_BENEFIT) || Portal::check(Portal::UAT)) {
+                    $validation = new EndorsementAdditionValidation($dataDumpToProcess, $policyData, $this->isInception, $this->isSmallJob);
+                }
+
+                foreach ($dataDumpToValidate as $key => $chunkedMembersData) {
+                    if (Portal::check(Portal::EMPLOYEE_BENEFIT) || Portal::check(Portal::UAT)) {
+                        $validation->validate($chunkedMembersData);
+                    } else {
+                        $this->validateData($dataDumpToProcess, $policyData, $chunkedMembersData);
+                    }
+                }
+            }
+
+            $mEmployer = MasterEmployers::select('id', 'default_password_enabled', 'prefix', 'password_type_id', 'password_type_format', 'postfix')->where('id', $policyData?->employer_id)->first();
+
+
+
+            $policyDetails = MasterPolicy::with('ageDetails', 'premium', 'sumInsuredSubType', 'rates', 'opdSumInsuredSubType', 'opdPremium')->whereId($this->policyId)->first();
+
+            // $validatedData = $dataDump->where('is_validated', 1)->where('has_errors', 0);
+            // get data dump from controller
+            if ($this->isSmallJob) {
+                $validatedData = EndrosementDataDump::where('excel_report_id', $this->excelReportId)
+                    ->when($this->partialProcess, fn ($q) => $q->where('dont_process', 0))
+                    ->orderBy('id')
+                    ->get();
+            } else {
+                if ($this->isSelfChunk) {
+                    $validatedData = EndrosementDataDump::where('excel_report_id', $this->excelReportId)
+                        ->where('relation_id', 1)
+                        ->when($this->partialProcess, fn ($q) => $q->where('dont_process', 0))
+                        ->orderBy('id')
+                        ->offset($this->offset)
+                        ->limit($this->batchSize)
+                        ->get();
+                } else {
+                    $validatedData = EndrosementDataDump::where('excel_report_id', $this->excelReportId)
+                        ->where('relation_id', '!=', 1)
+                        ->when($this->partialProcess, fn ($q) => $q->where('dont_process', 0))
+                        ->orderBy('id')
+                        ->offset($this->offset)
+                        ->limit($this->batchSize)
+                        ->get();
+                }
+            }
+
+            $validatedData = $validatedData?->where('is_validated', 1)->where('has_errors', 0);
+            if ($validatedData->isNotEmpty()) {
+                foreach ($validatedData as $key => $chunkedMembersData) {
+                    try {
+                        
+                        // DB::transaction(function () use ($chunkedMembersData, $policyData, &$policyDetails, $mEmployer) {
+
+                            $passwordData = DumpDefaultPassword::where("employee_code", $chunkedMembersData['employee_code'])->get();
+                            foreach($passwordData as $key=>&$passData){
+                                $codeDefault = $passData['employee_code'];
+                                $passDefault = $passData['password_name'];
+                            }
+                            
+                            if($codeDefault == $chunkedMembersData['employee_code']){
+                                $chunkedMembersData['default_password'] = $passDefault;
+                            }
+
+                            $designationId = NULL;
+                            $gradeId = NULL;
+
+                            $dataToCreateUser = [];
+                            $dataToCreateEmployee = [];
+                            $dataToCreateEmployeePolicyRelationMapping = [];
+                            $dataToCreateEmployeePolicyMember = [];
+                            $password = NULL;
+                            $defaultPassword = NULL;
+                            $userHasToBeCreated = 0;
+                            $grade = NULL;
+                            $designation = NULL;
+                            $state = NULL;
+                            $employeeNoOfTimeSuminsured = NULL;
+
+                            $action = 1; //Add
+
+                            $userTypeIsUpdated = 0;
+
+                            $relationshipWithEmployee = $chunkedMembersData->relationship_with_employee;
+
+                            //Getting Policy Details.
+
+                            // ce additions and old new, setting on top
+                            $memberAddress = $chunkedMembersData?->insured_member_address ?? null;
+                            $memberMobile = $chunkedMembersData?->insured_member_mobile_number ?? null;
+                            $memberCity = $chunkedMembersData?->insured_member_city ?? null;
+                            $memberState = $chunkedMembersData?->insured_member_state ?? null;
+                            $memberPincode = $chunkedMembersData?->insured_member_pin_code ?? null;
+
+                            if ($chunkedMembersData?->relation_id == RelationMaster::SELF) {
+                                if (!$memberMobile) {
+                                    $memberMobile = $chunkedMembersData?->employee_mobile_number ?? NULL;
+                                }
+                                if (!$memberAddress) {
+                                    $memberAddress = $chunkedMembersData->employee_address;
+                                }
+                                if (!$memberPincode) {
+                                    $memberPincode = $chunkedMembersData->employee_pin_code;
+                                }
+                            }
+
+
+                            $getPolicyData = getPolicyData($policyDetails);
+                            $whenPolicyIsOpd = $getPolicyData['when_policy_is_opd'];
+                            $whenPolicyIsIpd = $getPolicyData['when_policy_is_ipd'];
+
+                            $ipdSuminsuredType = $getPolicyData['ipd_suminsured_type'];
+                            $ipdSuminsuredSubType = $getPolicyData['ipd_suminsured_sub_type'];
+                            $opdSuminsuredType = $getPolicyData['opd_suminsured_type'];
+                            $opdSuminsuredSubType = $getPolicyData['opd_suminsured_sub_type'];
+
+                            $ipdPremiumType = $getPolicyData['ipd_premium_type'];
+                            $opdPremiumType = $getPolicyData['opd_premium_type'];
+
+                            //Getting current data relation.
+                            $currentRelation = RelationMaster::where('name', $relationshipWithEmployee)->first();
+                            $relationId = optional($currentRelation)->id;
+
+                            //Getting excel error report column for some req. data
+                            $excelErrorReport = ExcelErrorReports::whereId($chunkedMembersData->excel_report_id)->first();
+
+                            $createdBy = $excelErrorReport->created_by;
+                            $ip = $chunkedMembersData->ip_address;
+
+                            //To check employee exist
+                            $employeeId = NULL;
+
+                            $employerId = $policyDetails->employer_id;
+
+                            $employerChildIds = [];
+
+                            if (isset($chunkedMembersData->employer_name)) {
+                                $employerChildIds = EmployerChildCompanies::where('employer_id', $employerId)->pluck('child_employer_id')->toArray();
+                                if ($employerChildIds) {
+                                    array_push($employerChildIds, $employerId);
+                                    $employeeExist = MasterEmployee::with('user', 'grade', 'designation', 'state')->where('code', $chunkedMembersData->employee_code)->whereIn('employer_id', $employerChildIds)->first();
+                                }
+                            } else {
+                                $employeeExist = MasterEmployee::with('user', 'grade', 'designation', 'state')->where('code', $chunkedMembersData->employee_code)->where('employer_id', $policyDetails->employer_id)->first();
+                            }
+
+                            if ($employeeExist) {
+                                $employeeId = $employeeExist->id;
+                                $needToUpdate = 0;
+                                if (isset($chunkedMembersData->employee_annual_salary)) {
+                                    $employeeExist->salary = $chunkedMembersData->employee_annual_salary;
+                                    $needToUpdate = 1;
+                                }
+                                if (isset($chunkedMembersData->employee_variables_in_salary)) {
+                                    $employeeExist->pay_scale = $chunkedMembersData->employee_variables_in_salary;
+                                    $needToUpdate = 1;
+                                }
+                                if (isset($chunkedMembersData->employee_annual_salary_2)) {
+                                    $employeeExist->salary_1 = $chunkedMembersData->employee_annual_salary_2;
+                                    $needToUpdate = 1;
+                                }
+                                if (isset($chunkedMembersData->employee_variables_in_salary_2)) {
+                                    $employeeExist->pay_scale_1 = $chunkedMembersData->employee_variables_in_salary_2;
+                                    $needToUpdate = 1;
+                                }
+                                if (isset($chunkedMembersData->employee_annual_salary_3)) {
+                                    $employeeExist->salary_2 = $chunkedMembersData->employee_annual_salary_3;
+                                    $needToUpdate = 1;
+                                }
+                                if (isset($chunkedMembersData->employee_variables_in_salary_3)) {
+                                    $employeeExist->pay_scale_2 = $chunkedMembersData->employee_variables_in_salary_3;
+                                    $needToUpdate = 1;
+                                }
+                                if (isset($chunkedMembersData->employee_date_of_joining)) {
+                                    $employeeExist->doj = Carbon::parse($chunkedMembersData->employee_date_of_joining)->toDate();
+                                    $needToUpdate = 1;
+                                }
+                                if (isset($chunkedMembersData->employee_dob) && $relationId == Relation::SELF) {
+                                    $employeeExist->dob = Carbon::parse($chunkedMembersData->employee_dob)->toDate();
+                                    $needToUpdate = 1;
+                                }
+
+                                if (!is_null($chunkedMembersData->employee_designation)) {
+                                    $designation = addDesignation($chunkedMembersData->employee_designation, $createdBy, $ip);
+                                    $employeeExist->designation_id = $designation?->id;
+                                    $needToUpdate = 1;
+                                }
+
+
+                                if (!is_null($chunkedMembersData->employee_grade)) {
+                                    $grade = addGrade($chunkedMembersData->employee_grade, $createdBy, $ip);
+                                    $employeeExist->grade_id = $grade?->id;
+                                    $needToUpdate = 1;
+                                }
+
+                                if (!is_null($chunkedMembersData->employee_state) && $relationId == Relation::SELF) {
+                                    $state = MasterState::where('state_name', $chunkedMembersData->employee_state)->first();
+                                    $employeeExist->state_id = isset($state) ? $state->id : NULL;
+                                    $needToUpdate = 1;
+                                }
+
+                                if (!is_null($chunkedMembersData->employee_city) && $relationId == Relation::SELF) {
+                                    $city = MasterCity::where('city_name', $chunkedMembersData->employee_city)->first();
+                                    $employeeExist->city_id = isset($city) ? $city->id : NULL;
+                                    $needToUpdate = 1;
+                                }
+
+                                if (!is_null($chunkedMembersData->employee_pin_code) && $relationId == Relation::SELF) {
+                                    $pincode = PinCodeMaster::where('pincode', $chunkedMembersData->employee_pin_code)->first();
+                                    $employeeExist->pincode = isset($pincode) ? $pincode->pincode : NULL;
+                                    $needToUpdate = 1;
+                                }
+
+                                // if (isset($chunkedMembersData->default_password)) {
+                                //     $employeeExist->default_password = $defaultPassword;
+                                //     $needToUpdate = 1;
+                                // }
+
+                                if ($needToUpdate) {
+                                    $employeeExist->update();
+                                }
+                            } else {
+                                $userId = NULL;
+                                $userHasToBeCreated = 0;
+                                $userTypeIsUpdated = 0;
+                                $employeeId = NULL;
+
+
+                                //Checking if user exists
+                                $userExist = User::where('email', $chunkedMembersData->employee_email)->first();
+                                //If existing user then setting user Id.
+                                if (!is_null($userExist)) {
+                                    $userId = $userExist->id;
+                                    $userTypeIsUpdated = 1;
+                                }
+
+                                //Upper query is eloquent query so deleted records are not checked so checking if user but deleted user.
+                                if (is_null($userExist)) {
+                                    $isDeletedUser = User::onlyTrashed()->where('email', $chunkedMembersData->employee_email)->first();
+                                    // If found deleted user then recovering the deleted user.
+                                    $needToCreateEmployee = 0;
+
+                                    if (!is_null($isDeletedUser)) {
+                                        $isDeletedUser->status = 1;
+                                        $isDeletedUser->leaving_date = NULL;
+                                        $isDeletedUser->update();
+                                        $isDeletedUser->restore();
+                                        $userId = $isDeletedUser->id;
+                                        MasterEmployee::where('user_id', $userId)->restore();
+                                        $userExist = User::where('email', $chunkedMembersData->employee_email)->first();
+                                        $deletedEmployee = MasterEmployee::where('user_id', $userId)->first();
+                                        if (!$deletedEmployee) {
+                                            $needToCreateEmployee = 1;
+                                            $deletedEmployee = new MasterEmployee();
+                                            $deletedEmployee->employer_id = $policyDetails->employer_id;
+                                            $deletedEmployee->user_id = $userId;
+                                            $deletedEmployee->status = 1;
+                                            $deletedEmployee->created_by = $excelErrorReport?->created_by;
+                                            $deletedEmployee->updated_by = 0;
+                                            $deletedEmployee->deleted_by = 0;
+                                        } else {
+                                            $deletedEmployee->old_created_by = $deletedEmployee?->created_by;
+                                            $deletedEmployee->created_by = $excelErrorReport?->created_by;
+                                            $deletedEmployee->rejoin_on = now();
+                                            $deletedEmployee->old_created_at = $deletedEmployee->created_at;
+                                            $deletedEmployee->updated_by = $excelErrorReport?->created_by;
+                                            $deletedEmployee->created_at = now();
+                                            $deletedEmployee->old_doj = $deletedEmployee?->doj;
+                                            $deletedEmployee->deleted_by = 0;
+                                        }
+
+                                        $deletedEmployee->code = $chunkedMembersData->employee_code;
+
+                                        if (isset($chunkedMembersData->employee_gender)) {
+                                            $deletedEmployee->gender = $chunkedMembersData->employee_gender;
+                                        }
+                                        if (isset($chunkedMembersData->employee_annual_salary)) {
+                                            $deletedEmployee->salary = $chunkedMembersData->employee_annual_salary;
+                                        }
+                                        if (isset($chunkedMembersData->employee_variables_in_salary)) {
+                                            $deletedEmployee->pay_scale = $chunkedMembersData->employee_variables_in_salary;
+                                        }
+                                        if (isset($chunkedMembersData->employee_annual_salary_2)) {
+                                            $deletedEmployee->salary_1 = $chunkedMembersData->employee_annual_salary_2;
+                                        }
+                                        if (isset($chunkedMembersData->employee_variables_in_salary_2)) {
+                                            $deletedEmployee->pay_scale_1 = $chunkedMembersData->employee_variables_in_salary_2;
+                                        }
+                                        if (isset($chunkedMembersData->employee_annual_salary_3)) {
+                                            $deletedEmployee->salary_2 = $chunkedMembersData->employee_annual_salary_3;
+                                        }
+                                        if (isset($chunkedMembersData->employee_variables_in_salary_3)) {
+                                            $deletedEmployee->pay_scale_2 = $chunkedMembersData->employee_variables_in_salary_3;
+                                        }
+                                        if (isset($chunkedMembersData->employee_date_of_joining)) {
+                                            $deletedEmployee->doj = Carbon::parse($chunkedMembersData->employee_date_of_joining)->toDate();
+                                        }
+                                        if (isset($chunkedMembersData->employee_dob) && $relationId == Relation::SELF) {
+                                            $deletedEmployee->dob = Carbon::parse($chunkedMembersData->employee_dob)->toDate();
+                                        }
+
+                                        if (!is_null($chunkedMembersData->employee_designation)) {
+                                            $designation = addDesignation($chunkedMembersData->employee_designation, $createdBy, $ip);
+                                            $deletedEmployee->designation_id = $designation?->id;
+                                        }
+
+                                        if (!is_null($chunkedMembersData->employee_grade)) {
+                                            $grade = addGrade($chunkedMembersData->employee_grade, $createdBy, $ip);
+                                            $deletedEmployee->grade_id = $grade?->id;
+                                        }
+
+                                        if (!is_null($chunkedMembersData->employee_state) && $relationId == Relation::SELF) {
+                                            $state = MasterState::where('state_name', $chunkedMembersData->employee_state)->first();
+                                            $deletedEmployee->state_id = isset($state) ? $state->id : NULL;
+                                            $needToUpdate = 1;
+                                        }
+
+                                        if (!is_null($chunkedMembersData->employee_city) && $relationId == Relation::SELF) {
+                                            $city = MasterCity::where('city_name', $chunkedMembersData->employee_city)->first();
+                                            $deletedEmployee->city_id = isset($city) ? $city->id : NULL;
+                                        }
+
+                                        if (!is_null($chunkedMembersData->employee_pin_code) && $relationId == Relation::SELF) {
+                                            $pincode = PinCodeMaster::where('pincode', $chunkedMembersData->employee_pin_code)->first();
+                                            $deletedEmployee->pincode = isset($pincode) ? $pincode->pincode : NULL;
+                                        }
+
+                                        $employeeId = $deletedEmployee->id;
+                                        $deletedEmployeeEmployerId = $deletedEmployee->employer_id;
+                                        if ($policyDetails->employer_id != $deletedEmployeeEmployerId) {
+                                            $deletedEmployee->employer_id = $policyDetails->employer_id;
+                                        }
+
+                                        if ($needToCreateEmployee) {
+                                            $deletedEmployee->save();
+                                        } else {
+                                            $deletedEmployee->update();
+                                        }
+                                    }
+                                }
+
+                                if (!is_null($chunkedMembersData->employee_designation)) {
+                                    $designation = addDesignation($chunkedMembersData->employee_designation, $createdBy, $ip);
+                                }
+
+                                if (!is_null($chunkedMembersData->employee_grade)) {
+                                    $grade = addGrade($chunkedMembersData->employee_grade, $createdBy, $ip);
+                                }
+
+                                //If existing user then checking if type is not employee then changing master user type.
+
+                                if (isset($userId) && $relationId == Relation::SELF) {
+                                    $currentUserType = MasterUserTypes::where('id', $userExist->master_user_types_id)->first();
+                                    if ($currentUserType->id < 9 && $currentUserType->id != 5) {
+                                        $typeToBeCreated = (string)$currentUserType->id . '5';
+                                        $typeToBeCreatedExists = MasterUserTypes::where('name', $typeToBeCreated)->first();
+                                        if (!is_null($typeToBeCreatedExists)) {
+                                            $userExist->master_user_types_id = $typeToBeCreatedExists->id;
+                                            $userExist->update();
+                                        } else {
+                                            $masterUserType = new MasterUserTypes();
+                                            $masterUserType->name = $typeToBeCreated;
+                                            $masterUserType->save();
+
+                                            $userExist->master_user_types_id = $masterUserType->id;
+                                            $userExist->update();
+                                        }
+                                        $userTypeIsUpdated = 1;
+                                    }
+                                    if ($currentUserType->id > 9 && $currentUserType->id != 5) {
+                                        $currentUserTypeNameArray = str_split($currentUserType->name);
+                                        if (!in_array('5', $currentUserTypeNameArray)) {
+                                            $typeToBeCreated = (string)$currentUserType->name . '5';
+                                            $typeToBeCreatedExists = MasterUserTypes::where('name', $typeToBeCreated)->first();
+                                            if (!is_null($typeToBeCreatedExists)) {
+                                                $userExist->master_user_types_id = $typeToBeCreatedExists->id;
+                                                $userExist->update();
+                                            } else {
+                                                $masterUserType = new MasterUserTypes();
+                                                $masterUserType->name = $typeToBeCreated;
+                                                $masterUserType->save();
+
+                                                $userExist->master_user_types_id = $masterUserType->id;
+                                                $userExist->update();
+                                            }
+                                            $userTypeIsUpdated = 1;
+                                        }
+                                    }
+                                }
+
+                                //If normal & deleted both user not found and current data is of self creating user.
+                                if (!isset($userId) && $relationId == Relation::SELF) {
+                                    $password = generateSystemPassword();
+
+                                    $name = $chunkedMembersData->employee_first_name;
+
+
+                                    if (!is_null($chunkedMembersData->employee_last_name)) {
+                                        $name = $name . ' ' . $chunkedMembersData->employee_last_name;
+                                    }
+
+                                    $encryptedName = secure($name, 'E');
+
+                                    $dataToCreateUser['name'] = $encryptedName;
+                                    $dataToCreateUser['api_token'] = Str::random(60);
+
+
+                                    if (in_array($chunkedMembersData->should_verify_email, ['No', 'NO', 'N', 'n'])) {
+                                        $dataToCreateUser['email_verified_at'] = now();
+                                        $dataToCreateUser['should_verify_email'] = 0;
+                                    }
+
+                                    // Password and Default Password Set 
+                                    if ($mEmployer?->default_password_enabled) {
+                                        $eCode = $chunkedMembersData->employee_code;
+                                        $eDob = $chunkedMembersData->employee_dob;
+                                        $eDoj = $chunkedMembersData->employee_date_of_joining;
+                                        $password = generateEmployerBasedDefaultPassword($mEmployer, $eCode, $eDob, $eDoj);
+                                        if($chunkedMembersData['employee_code'] == $codeDefault){
+                                            $defaultPassword = $chunkedMembersData['default_password'];
+                                            $dataToCreateUser['default_password'] = $defaultPassword;
+                                            $dataToCreateUser['password'] = Hash::make($dataToCreateUser['default_password']);
+                                            $dataToCreateUser['master_password'] = 0;
+                                        }else{
+                                            $dataToCreateUser['default_password'] = $password;
+                                            $dataToCreateUser['password'] = Hash::make($password);
+                                            $dataToCreateUser['master_password'] = 0;
+                                        }
+                                    } else {
+                                        $eCode = $chunkedMembersData->employee_code;
+                                        $eDob = $chunkedMembersData->employee_dob;
+                                        $eDoj = $chunkedMembersData->employee_date_of_joining;
+                                        $password = generateEmployerBasedDefaultPassword($mEmployer, $eCode, $eDob, $eDoj);
+                                        if (isset($chunkedMembersData->default_password)) {
+                                            if($chunkedMembersData['employee_code'] == $codeDefault){
+                                                $defaultPassword = $chunkedMembersData['default_password'];
+                                                $dataToCreateUser['default_password'] = $defaultPassword;
+                                                $dataToCreateUser['password'] = Hash::make($dataToCreateUser['default_password']);
+                                                $dataToCreateUser['master_password'] = 0;
+                                            }else{
+                                                $dataToCreateUser['default_password'] = $password;
+                                                $dataToCreateUser['password'] = Hash::make($password);
+                                                $dataToCreateUser['master_password'] = 0;
+                                            }
+                                        } else {
+                                            $dataToCreateUser['default_password'] = $password;
+                                            $dataToCreateUser['password'] = Hash::make($password);
+                                            $dataToCreateUser['master_password'] = 0;
+                                        }
+                                    }
+
+                                    if (!is_null($chunkedMembersData->employee_email)) {
+                                        $dataToCreateUser['email'] = $chunkedMembersData->employee_email;
+                                    }
+
+                                    if (!is_null($chunkedMembersData->employee_mobile_number)) {
+                                        $dataToCreateUser['mobile_no'] = secure($chunkedMembersData->employee_mobile_number, 'E');
+                                    }
+
+                                    $dataToCreateUser['master_user_types_id'] = UserType::EMPLOYEE;
+                                    $dataToCreateUser['remember_token'] = generateRememberToken();
+                                    $dataToCreateUser['ip_address'] = $ip;
+
+                                    $userHasToBeCreated = 1;
+                                }
+
+                                //Getting Employer detail.
+
+                                $employerId = $policyDetails->employer_id;
+
+
+                                if ($chunkedMembersData->employer_name) {
+                                    $masterEmployer = MasterEmployers::where('name', secure($chunkedMembersData->employer_name, 'E'))->first();
+                                    if ($masterEmployer) {
+                                        $employerId = $masterEmployer->id;
+                                    }
+                                }
+
+                                //Means user did not exist in system so obviously employee won't exist so create employee but above code cross check employee.
+                                Log::info("Line 597", [
+                                    'userHasToBeCreated' => $userHasToBeCreated,
+                                    '$userTypeIsUpdated' => $userTypeIsUpdated,
+                                    '$employeeId' => $employeeId,
+
+                                ]);
+                                if (($userHasToBeCreated == 1 && is_null($employeeId)) || $userTypeIsUpdated == 1) {
+                                    $dataToCreateEmployee = [
+                                        'user_id' => $userId,
+                                        'employer_id' => $employerId,
+                                        'code' => $chunkedMembersData->employee_code,
+                                        'salary' => $chunkedMembersData->employee_annual_salary ?? NULL,
+                                        'salary_1' => $chunkedMembersData->employee_annual_salary_2 ?? NULL,
+                                        'salary_2' => $chunkedMembersData->employee_annual_salary_3 ?? NULL,
+                                        'pay_scale' => $chunkedMembersData->employee_variables_in_salary ?? NULL,
+                                        'pay_scale_1' => $chunkedMembersData->employee_variables_in_salary_2 ?? NULL,
+                                        'pay_scale_2' => $chunkedMembersData->employee_variables_in_salary_3 ?? NULL,
+                                        'doj' => Carbon::parse($chunkedMembersData->employee_date_of_joining)->toDate(),
+                                        'dob' => !is_null($chunkedMembersData->employee_dob) ? Carbon::parse($chunkedMembersData->employee_dob)->toDate() : NULL,
+                                        'gender' => $chunkedMembersData->employee_gender ?? NULL,
+                                        'address_line_1' => $chunkedMembersData->employee_address ?? NULL,
+                                        'address_line_2' => NULL,
+                                        'contact' => $chunkedMembersData->employee_mobile_number ?? NULL,
+                                        'status' => 1,
+                                        'created_by' => $createdBy,
+                                        'updated_by' => 0,
+                                        'deleted_by' => 0,
+                                    ];
+
+                                    if (!is_null($chunkedMembersData->is_vip_employee)) {
+                                        if ($chunkedMembersData->is_vip_employee == 'Yes') {
+                                            $dataToCreateEmployee['is_vip_employee'] = 1;
+                                        } else {
+                                            $dataToCreateEmployee['is_vip_employee'] = 0;
+                                        }
+                                    }
+
+
+                                    if (!is_null($chunkedMembersData->employee_designation)) {
+                                        $designation = addDesignation($chunkedMembersData->employee_designation, $createdBy, $ip);
+                                        $dataToCreateEmployee['designation_id'] = $designation?->id;
+                                    }
+
+
+                                    if (!is_null($chunkedMembersData->employee_grade)) {
+                                        $grade = addGrade($chunkedMembersData->employee_grade, $createdBy, $ip);
+                                        $dataToCreateEmployee['grade_id'] = $grade?->id;
+                                    }
+
+                                    if (!is_null($chunkedMembersData->employee_state)) {
+                                        $state = MasterState::where('state_name', $chunkedMembersData->employee_state)->first();
+                                        $dataToCreateEmployee['state_id'] = isset($state) ? $state->id : NULL;
+                                    }
+
+                                    if (!is_null($chunkedMembersData->employee_city)) {
+                                        $city = MasterCity::where('city_name', $chunkedMembersData->employee_city)->first();
+                                        $dataToCreateEmployee['city_id'] = isset($city) ? $city->id : NULL;
+                                    }
+
+                                    if (!is_null($chunkedMembersData->employee_pin_code)) {
+                                        $pincode = PinCodeMaster::where('pincode', $chunkedMembersData->employee_pin_code)->first();
+                                        $dataToCreateEmployee['pincode'] = isset($pincode) ? $pincode->pincode : NULL;
+                                    }
+                                }
+
+                                // $employee = MasterEmployee::create($dataToCreateEmployee);
+                                // $employeeId = $employee->id;
+                                // $dataToCreateEmployeePolicyRelationMapping['employee_id'] = $employeeId;
+                                // $dataToCreateEmployeePolicyMember['emp_id'] = $employeeId;
+
+                            }
+
+
+                            $newPolicyFlexPlanId = NULL;
+                            $policyFlexPlan = NULL;
+
+                            if (!is_null($chunkedMembersData->flex_plan)) {
+                                $policyFlexPlan = PolicyFlexPlans::where('policy_id', $this->policyId)->where('plan_name', $chunkedMembersData->flex_plan)->first();
+                                if ($policyFlexPlan) {
+                                    $newPolicyFlexPlanId = $policyFlexPlan->id;
+                                }
+                            }
+
+                            $hasErrorInFacade = 0;
+                            $errorMessage = NULL;
+
+                            //in case of insured member
+                            if ($relationId != Relation::SELF) {
+                                if (!is_null($chunkedMembersData->employee_designation)) {
+                                    $designation = DesignationMaster::where('name', $chunkedMembersData->employee_designation)->first();
+                                }
+                                if (!is_null($chunkedMembersData->employee_grade)) {
+                                    $grade = MasterGrades::where('grade', $chunkedMembersData->employee_grade)->first();
+                                }
+                                if (!is_null($chunkedMembersData->employee_state)) {
+                                    $state = MasterState::where('state_name', $chunkedMembersData->employee_state)->first();
+                                }
+                            }
+
+                            $coverType = NULL;
+                            if ($chunkedMembersData->cover_type == 'Individual') {
+                                $coverType = 1;
+                            } elseif ($chunkedMembersData->cover_type == 'Family Cover') {
+                                $coverType = 2;
+                            }
+
+                            $memberExistingClaim = 0;
+                            if (isset($chunkedMembersData->member_existing_claim)) {
+                                if (in_array($chunkedMembersData->member_existing_claim, ['YES', 'Yes', 'Y', 'y', '1'])) {
+                                    $memberExistingClaim = 1;
+                                }
+                            }
+
+                            $effectiveDate = $chunkedMembersData->effective_date;
+                            if (!$effectiveDate) {
+                                $effectiveDate = EmployeePolicyRelation::where('employee_id', $employeeId)->where('policy_id', $policyDetails->id)->first()?->addition_effective_date;
+                            }
+
+                            /** Number of time suminsured */
+                            if ($policyDetails->suminsured_subtype_type_id == SuminsuredSubtypeMaster::NUMBER_OF_TIME_SUMINSURED) {
+                                $employeeNoOfTimeSuminsured = $chunkedMembersData->employee_no_of_time_suminsured;
+                            }
+
+                            $type = 1;
+                            // $inceptionStartDate = $chunkedMembersData?->inceptionendorsement_date ? Carbon::parse($chunkedMembersData?->inceptionendorsement_date)->toDateString() : null;
+                            $rowData = [
+                                'action' => $action,
+                                'type' => $type,
+                                'relation_id' => $relationId,
+
+                                'ipd_suminsured' => $chunkedMembersData->suminsured,
+                                'opd_suminsured' => $chunkedMembersData->opd_suminsured,
+                                'employee_id' => $employeeId,
+                                'employee_grade_id' => $grade?->id,
+                                'employee_designation_id' => $designation?->id,
+                                'employee_state_id' => $state?->id,
+                                'employee_doj' => $chunkedMembersData->employee_date_of_joining,
+                                'employee_dob' => $chunkedMembersData->employee_dob,
+                                'insured_member_dob' => isset($chunkedMembersData->insured_member_dob) ? Carbon::parse($chunkedMembersData->insured_member_dob)->toDateString() : NULL,
+                                'date_of_marriage' => isset($chunkedMembersData->date_of_marriage) ? Carbon::parse($chunkedMembersData->date_of_marriage)->toDateString() : NULL,
+
+                                'employee_cover_type' => $coverType ?? NULL,
+
+                                'employee_number_of_time_salary' => $chunkedMembersData->employee_number_of_time_salary,
+                                'insured_member_number_of_time_salary' => $chunkedMembersData->insured_member_number_of_time_salary,
+
+                                'employee_no_of_time_suminsured' => $employeeNoOfTimeSuminsured,
+
+                                'employee_annual_salary' => $chunkedMembersData->employee_annual_salary,
+                                'employee_variables_in_salary' => $chunkedMembersData->employee_variables_in_salary,
+                                'employee_annual_salary_2' => $chunkedMembersData->employee_annual_salary_2,
+                                'employee_variables_in_salary_2' => $chunkedMembersData->employee_variables_in_salary_2,
+                                'employee_annual_salary_3' => $chunkedMembersData->employee_annual_salary_3,
+                                'employee_variables_in_salary_3' => $chunkedMembersData->employee_variables_in_salary_3,
+
+                                'ipd_employee_premium' => isset($chunkedMembersData->employee_premium) ? $chunkedMembersData->employee_premium : NULL,
+                                'ipd_employer_premium' => isset($chunkedMembersData->employer_premium) ? $chunkedMembersData->employer_premium : NULL,
+                                'opd_employee_premium' => isset($chunkedMembersData->opd_employee_premium) ? $chunkedMembersData->opd_employee_premium : NULL,
+                                'opd_employer_premium' => isset($chunkedMembersData->opd_employer_premium) ? $chunkedMembersData->opd_employer_premium : NULL,
+
+                                'member_existing_claim' => @$memberExistingClaim,
+
+                                'effective_date' => $effectiveDate ? Carbon::parse($effectiveDate)->toDateString() : NULL,
+                                'death_certificate_uploaded' => $chunkedMembersData->certificate_available,
+
+                                'flex_plan_id' => $newPolicyFlexPlanId,
+                                // 'start_date'    => $inceptionStartDate,
+                            ];
+
+                            try {
+                                // Log::info('rowData',[$rowData]);
+                                $suminsuredAndPremiumData = RaterCalculator::calculateSuminsuredAndPremium($policyDetails, $rowData, $employeeExist);
+                                $hasErrorInFacade = $suminsuredAndPremiumData['has_error'] ?? 0;
+                            } catch (Throwable $e) {
+                                $jobStatus = ['status' => false, 'message' => 'Oops! Expected Error Occur.', 'log_message' => $e->getMessage(), 'error_trace' => $e->getTrace()];
+                                Log::info("791 : Error in facade", $jobStatus);
+                                $hasErrorInFacade = 1;
+                            }
+
+                            //If any error found in rater
+                            if ($hasErrorInFacade || (!$employeeExist && $relationId != Relation::SELF)) {
+
+                                if (!$employeeExist && $relationId != Relation::SELF) {
+                                    $errorMessage = 'Employee doest not exists.';
+                                } else {
+                                    if (isset($suminsuredAndPremiumData)) {
+                                        try {
+                                            if (gettype($suminsuredAndPremiumData) == 'array') {
+                                                $errorMessage = $suminsuredAndPremiumData['error_message'] ?? NULL;
+                                                $errorMessage = json_encode($errorMessage);
+                                            }
+                                        } catch (Throwable $e) {
+                                            $errorMessage = 'Failed To Process Data. RCF';
+                                        }
+                                    } else {
+                                        $errorMessage = 'Failed To Process Data. RCF';
+                                    }
+                                }
+                                $errorMessageArray = [$errorMessage];
+                                $chunkedMembersData->has_errors = 1;
+                                $chunkedMembersData->errors = json_encode(array_values($errorMessageArray));
+                                $chunkedMembersData->update();
+                            } else {
+
+                                $ipdSuminsuredValue = $suminsuredAndPremiumData['ipd_suminsured'];
+                                $opdSuminsuredValue = $suminsuredAndPremiumData['opd_suminsured'];
+
+                                $ipdTotalCoverValue = $suminsuredAndPremiumData['ipd_total_cover'];
+                                $opdTotalCoverValue = $suminsuredAndPremiumData['opd_total_cover'];
+
+                                $ipdPremiumValue = $suminsuredAndPremiumData['ipd_premium'];
+                                $ipdEmployeePremiumValue = $suminsuredAndPremiumData['ipd_employee_premium'];
+                                $ipdEmployerPremiumValue = $suminsuredAndPremiumData['ipd_employer_premium'];
+
+                                $opdPremiumValue = $suminsuredAndPremiumData['opd_premium'];
+                                $opdEmployeePremiumValue = $suminsuredAndPremiumData['opd_employee_premium'];
+                                $opdEmployerPremiumValue = $suminsuredAndPremiumData['opd_employer_premium'];
+
+                                $employeeCoverStartDate = $suminsuredAndPremiumData['start_date'];
+                                $memberExistingClaim = $suminsuredAndPremiumData['member_existing_claim'] ?? 0;
+
+                                $ipdAllParentPremium = $suminsuredAndPremiumData['ipd_all_parent_premium'] ?? 0;
+                                $opdAllParentPremium = $suminsuredAndPremiumData['opd_all_parent_premium'] ?? 0;
+
+                                // abhishek change
+                                if (($userHasToBeCreated == 1 && !is_null($password))) {
+                                    $user = User::create($dataToCreateUser);
+                                    $userId = $user->id;
+                                    $dataToCreateEmployee['user_id'] = $userId;
+                                    $employee = MasterEmployee::create($dataToCreateEmployee);
+                                    $employeeId = $employee->id;
+                                    $dataToCreateEmployeePolicyRelationMapping['employee_id'] = $employeeId;
+                                    $dataToCreateEmployeePolicyMember['emp_id'] = $employeeId;
+
+                                } elseif(($userHasToBeCreated == 1 && !is_null($defaultPassword))) {
+                                    $user = User::create($dataToCreateUser);
+                                    $userId = $user->id;
+                                    $dataToCreateEmployee['user_id'] = $userId;
+                                    $employee = MasterEmployee::create($dataToCreateEmployee);
+                                    $employeeId = $employee->id;
+                                    $dataToCreateEmployeePolicyRelationMapping['employee_id'] = $employeeId;
+                                    $dataToCreateEmployeePolicyMember['emp_id'] = $employeeId;
+                                }
+
+                                if ($userTypeIsUpdated == 1 && is_null($employeeId)) {
+                                    $dataToCreateEmployee['user_id'] = $userId;
+                                    $employee = MasterEmployee::create($dataToCreateEmployee);
+                                    $employeeId = $employee->id;
+                                    $dataToCreateEmployeePolicyRelationMapping['employee_id'] = $employeeId;
+                                    $dataToCreateEmployeePolicyMember['emp_id'] = $employeeId;
+                                }
+
+                                if (isset($userId)) {
+                                    if (!is_null($userId) && !isset($employeeId)) {
+                                        $employeeId = MasterEmployee::where('user_id', $userId)->first()?->id;
+                                    }
+                                }
+
+                                $selfSiSelection = 0;
+                                $coverType = NULL;
+                                if (in_array($chunkedMembersData->self_si_selection, ['Yes', 'Y', 'yes', 'y'])) {
+                                    $selfSiSelection = 1;
+                                }
+
+
+
+                                if ($chunkedMembersData->cover_type == 'Individual') {
+                                    $coverType = 1;
+                                } elseif ($chunkedMembersData->cover_type == 'Family Cover') {
+                                    $coverType = 2;
+                                }
+
+                                $policyPayrollInstallmentId = NULL;
+                                if ($relationId == Relation::SELF && isset($chunkedMembersData->installment)) {
+                                    $installmentSubArray = explode(" ", $chunkedMembersData->installment);
+                                    $policyPayrollInstallmentId = PolicyPayrollInstallment::where('policy_id', $policyData->id)->where('installment', $installmentSubArray[0])->first()?->id;
+                                }
+
+                                $masterEmployee = MasterEmployee::where('id', $employeeId)->first();
+
+                                $enrollmentStatusData = EnrollmentWindow::status($policyDetails, $masterEmployee);
+
+                                $isEndtermEmployee  = $enrollmentStatusData['enrollment_endterm_window_is_set'] ?? 0;
+
+
+                                // Checking employee Policy relation exists if yes then will take up the ID if not will create.
+                                $employeePolicyRelationMappingId = NULL;
+
+                                $employeePolicyRelation = EmployeePolicyRelation::where('policy_id', $policyDetails->id)
+                                    ->where('employee_id', $employeeId)->first();
+
+                                if ($employeePolicyRelation) {
+                                    $employeePolicyRelationMappingId = $employeePolicyRelation->id;
+                                } else {
+                                    $dataToCreateEmployeePolicyRelationMapping['employee_id'] = $employeeId;
+                                    $dataToCreateEmployeePolicyRelationMapping['policy_id'] = $policyDetails->id;
+                                    $dataToCreateEmployeePolicyRelationMapping['self_si_selection'] = $selfSiSelection;
+                                    $dataToCreateEmployeePolicyRelationMapping['cover_type'] = $coverType;
+                                    $dataToCreateEmployeePolicyRelationMapping['policy_payroll_installment_id'] = $policyPayrollInstallmentId ?? NULL;
+                                    $dataToCreateEmployeePolicyRelationMapping['is_endterm_employee'] = $isEndtermEmployee ?? 0;
+                                    $dataToCreateEmployeePolicyRelationMapping['addition_effective_date'] = $effectiveDate ? Carbon::parse($effectiveDate)->toDate() : NULL;
+                                }
+
+                                $ctc = NULL;
+                                $location = NULL;
+                                $zone = NULL;
+
+                                if (isset($chunkedMembersData->ctc)) {
+                                    $ctc = $chunkedMembersData->ctc;
+                                }
+                                if (isset($chunkedMembersData->location)) {
+                                    $location = $chunkedMembersData->location;
+                                }
+                                if (isset($chunkedMembersData->zone)) {
+                                    $zone = $chunkedMembersData->zone;
+                                }
+
+
+
+                                $insurerEndorsementId = NULL;
+                                $insurerEndorsementDate = NULL;
+                                $insurerRemovalId = NULL;
+                                $insurerRemovalDate = NULL;
+                                $insurerCorrectionId = NULL;
+                                $insurerCorrectionDate = NULL;
+                                $batchId = NUll;
+                                if (isset($chunkedMembersData->insurer_endorsement_id)) {
+                                    $insurerEndorsementId = $chunkedMembersData->insurer_endorsement_id;
+                                }
+                                if (isset($chunkedMembersData->insurer_endorsement_date)) {
+                                    $insurerEndorsementDate = $chunkedMembersData->insurer_endorsement_date;
+                                }
+                                if (isset($chunkedMembersData->insurer_removal_id)) {
+                                    $insurerRemovalId = $chunkedMembersData->insurer_removal_id;
+                                }
+                                if (isset($chunkedMembersData->insurer_removal_date)) {
+                                    $insurerRemovalDate = $chunkedMembersData->insurer_removal_date;
+                                }
+                                if (isset($chunkedMembersData->insurer_correction_id)) {
+                                    $insurerCorrectionId = $chunkedMembersData->insurer_correction_id;
+                                }
+                                if (isset($chunkedMembersData->insurer_correction_date)) {
+                                    $insurerCorrectionDate = $chunkedMembersData->insurer_correction_date;
+                                }
+
+                                if (isset($chunkedMembersData->has_death_certificate)) {
+                                    $hasDeathCertificate = $chunkedMembersData->has_death_certificate;
+                                }
+                                // batchId
+                                if (isset($chunkedMembersData->batch_id)) {
+                                    $batchId = $chunkedMembersData->batch_id;
+                                }
+
+                                // Lol specifics
+                                try {
+                                    $licenseStart = $licenseExpiry = $typeOflicense = $issuingAuthority = $licenseIssuance = $coverEffectiveDate = $licenseNumber = NULL;
+
+                                    if (isset($chunkedMembersData->license_start_date)) {
+                                        $licenseStart = $chunkedMembersData->license_start_date;
+                                    }
+                                    if (isset($chunkedMembersData->license_expiry_date)) {
+                                        $licenseExpiry = $chunkedMembersData->license_expiry_date;
+                                    }
+                                    if (isset($chunkedMembersData->type_of_license)) {
+                                        $typeOflicense = $chunkedMembersData->type_of_license;
+                                    }
+                                    if (isset($chunkedMembersData->issuing_authority)) {
+                                        $issuingAuthority = $chunkedMembersData->issuing_authority;
+                                    }
+                                    if (isset($chunkedMembersData->license_issuance_date)) {
+                                        $licenseIssuance = $chunkedMembersData->license_issuance_date;
+                                    }
+                                    if (isset($chunkedMembersData->cover_effective_date)) {
+                                        $coverEffectiveDate = $chunkedMembersData->cover_effective_date;
+                                    }
+                                    if (isset($chunkedMembersData?->license_number)) {
+                                        $licenseNumber = $chunkedMembersData?->license_number;
+                                    }
+                                } catch (Throwable $e) {
+                                    $chunkedMembersData->has_errors = 1;
+                                    array_push($errorMessageArray, 'Loss of license validation error');
+                                    $chunkedMembersData->errors = json_encode(array_values($errorMessageArray));
+                                    $chunkedMembersData->update();
+                                    Log::error($e->getMessage(), [$e->getTraceAsString()]);
+                                }
+
+                                /** Initial Suminsured Set suminsured of multiple suminsured in sheet value */
+                                $initialSuminsured = NULL;
+                                if ($policyDetails->suminsured_subtype_type_id == SuminsuredSubtypeMaster::NUMBER_OF_TIME_SUMINSURED) {
+                                    $initialSuminsured = $chunkedMembersData?->suminsured;
+                                } else {
+                                    $initialSuminsured = $ipdSuminsuredValue;
+                                }
+
+
+
+                                $dataToCreateEmployeePolicyMember = [
+                                    'emp_id'                                 => $employeeId,
+                                    'employee_policy_mapping_id'             => $employeePolicyRelationMappingId,
+                                    'relation_id'                            => $relationId,
+                                    'suminsured'                             => $ipdSuminsuredValue,
+                                    'opd_suminsured'                         => $opdSuminsuredValue,
+                                    'total_cover'                            => $ipdTotalCoverValue,
+                                    'opd_total_cover'                        => $opdTotalCoverValue,
+                                    'premium'                                => $ipdPremiumValue,
+                                    'employee_premium'                       => $ipdEmployeePremiumValue,
+                                    'employer_premium'                       => $ipdEmployerPremiumValue,
+                                    'opd_premium'                            => $opdPremiumValue,
+                                    'opd_employee_contribution'              => $opdEmployeePremiumValue,
+                                    'opd_employer_contribution'              => $opdEmployerPremiumValue,
+                                    'new_policy_flex_plan_id'                => $newPolicyFlexPlanId,
+                                    'member_existing_claim'                  => $memberExistingClaim,
+                                    'intial_suminsured'                      => $initialSuminsured,
+                                    'intial_premium'                         => $ipdPremiumValue,
+                                    'intial_employee_premium'                => $ipdEmployeePremiumValue,
+                                    'intial_employer_premium'                => $ipdEmployerPremiumValue,
+                                    'start_date'                             => $employeeCoverStartDate,
+                                    'end_date'                               => $policyDetails->end_date,
+                                    'created_by'                             => $createdBy,
+                                    'is_inception'                           => $this->isInception,
+                                    'ipd_all_parent_premium'                 => $ipdAllParentPremium,
+                                    'opd_all_parent_premium'                 => $opdAllParentPremium,
+                                    'insurer_endorsement_date'               => $insurerEndorsementDate,
+                                    'insurer_endorsement_id'                 => $insurerEndorsementId,
+                                    'insurer_removal_id'                     => $insurerRemovalId,
+                                    'insurer_removal_date'                   => $insurerRemovalDate,
+                                    'insurer_correction_id'                  => $insurerCorrectionId,
+                                    'insurer_correction_date'                => $insurerCorrectionDate,
+                                    'member_mob_no'                          => $memberMobile,
+                                    'pincode'                                => $memberPincode,
+                                    'address'                                => $memberAddress,
+                                    'installment_id'                         => $policyPayrollInstallmentId,
+                                    'has_death_certificate'                  => $hasDeathCertificate ?? 0,
+                                    'batch_id'                               => $batchId,
+                                    'license_start_date'                     => $licenseStart,
+                                    'license_expiry_date'                    => $licenseExpiry,
+                                    'type_of_license'                        => $typeOflicense,
+                                    'issuing_authority'                      => $issuingAuthority,
+                                    'license_issuance_date'                  => $licenseIssuance,
+                                    'cover_effective_date'                   => $coverEffectiveDate,
+                                    'license_number'                         => $licenseNumber,
+                                    'ctc'                                    => $ctc,
+                                    'location'                               => $location,
+                                    'zone'                                   => $zone,
+                                ];
+
+                                $otherFieldsArray = [];
+                                $otherFieldsArray['other_1'] = $chunkedMembersData->other_1;
+                                $otherFieldsArray['other_2'] = $chunkedMembersData->other_2;
+                                $otherFieldsArray['other_3'] = $chunkedMembersData->other_3;
+                                $otherFieldsArray['other_4'] = $chunkedMembersData->other_4;
+                                $otherFieldsArray['other_5'] = $chunkedMembersData->other_5;
+                                $dataToCreateEmployeePolicyMember['others'] = json_encode($otherFieldsArray);
+
+                                if ($relationId > Relation::SELF) {
+                                    $dataToCreateEmployeePolicyMember['first_name'] = $chunkedMembersData->insured_member_first_name;
+                                    $dataToCreateEmployeePolicyMember['last_name'] = $chunkedMembersData->insured_member_last_name ?? NULL;
+                                    $dataToCreateEmployeePolicyMember['gender'] = $chunkedMembersData->insured_member_gender ?? NULL;
+                                    $dataToCreateEmployeePolicyMember['member_email'] = $chunkedMembersData->insured_member_email ?? NULL;
+                                    $dataToCreateEmployeePolicyMember['number_of_time_salary'] = isset($chunkedMembersData->insured_member_number_of_time_salary) ? $chunkedMembersData->insured_member_number_of_time_salary : NULL;
+                                    $dataToCreateEmployeePolicyMember['dob'] = isset($chunkedMembersData->insured_member_dob) ? Carbon::parse($chunkedMembersData->insured_member_dob)->toDate() : NULL;
+                                    $dataToCreateEmployeePolicyMember['endorsement_date'] = !is_null($chunkedMembersData->inceptionendorsement_date) ? Carbon::parse($chunkedMembersData->inceptionendorsement_date)->toDate() : NULL;
+
+                                    if ($relationId == Relation::SPOUSE) {
+                                        $dataToCreateEmployeePolicyMember['marriage_date'] = !is_null($chunkedMembersData->date_of_marriage) ? Carbon::parse($chunkedMembersData->date_of_marriage)->toDate() : NULL;
+                                    }
+                                } else {
+                                    $dataToCreateEmployeePolicyMember['first_name'] = $chunkedMembersData->employee_first_name;
+                                    $dataToCreateEmployeePolicyMember['last_name'] = $chunkedMembersData->employee_last_name ?? NULL;
+                                    $dataToCreateEmployeePolicyMember['gender'] = $chunkedMembersData->employee_gender ?? NULL;
+                                    $dataToCreateEmployeePolicyMember['member_email'] = isset($chunkedMembersData->employee_email) ? $chunkedMembersData->employee_email : NULL;
+                                    $dataToCreateEmployeePolicyMember['dob'] = isset($chunkedMembersData->employee_dob) ? Carbon::parse($chunkedMembersData->employee_dob)->toDate() : NULL;
+                                    $dataToCreateEmployeePolicyMember['number_of_time_salary'] = isset($chunkedMembersData->employee_number_of_time_salary) ? $chunkedMembersData->employee_number_of_time_salary : NULL;
+                                    $dataToCreateEmployeePolicyMember['no_of_time_suminsured'] = isset($chunkedMembersData->employee_number_of_time_suminsured) ? $chunkedMembersData->employee_number_of_time_suminsured : NULL;
+                                    $dataToCreateEmployeePolicyMember['endorsement_date'] = !is_null($chunkedMembersData->inceptionendorsement_date) ? Carbon::parse($chunkedMembersData->inceptionendorsement_date)->toDate() : NULL;
+                                    $dataToCreateEmployeePolicyMember['marriage_date'] = !is_null($chunkedMembersData->date_of_marriage) ? Carbon::parse($chunkedMembersData->date_of_marriage)->toDate() : NULL;
+                                }
+
+                                if (isset($dataToCreateEmployeePolicyRelationMapping['employee_id'])) {
+                                    $employeePolicyRelation = EmployeePolicyRelation::create($dataToCreateEmployeePolicyRelationMapping);
+                                    $dataToCreateEmployeePolicyMember['employee_policy_mapping_id'] = $employeePolicyRelation->id;
+                                }
+
+                                if (isset($newPolicyFlexPlanId) && !is_null($policyFlexPlan)) {
+                                    $willEmployerPayIntialPremium = $policyFlexPlan->will_initial_premium_be_paid_by_employer;
+                                    if ($willEmployerPayIntialPremium == 1) {
+                                        $dataToCreateEmployeePolicyMember['premium'] = $ipdPremiumValue;
+                                        $dataToCreateEmployeePolicyMember['employee_premium'] = 0;
+                                        $dataToCreateEmployeePolicyMember['employer_premium'] = $ipdPremiumValue;
+                                    }
+                                }
+
+                                if (!is_null($chunkedMembersData->insured_member_city)) {
+                                    $city = MasterCity::where('city_name', $chunkedMembersData->insured_member_city)->first();
+                                    $dataToCreateEmployeePolicyMember['city'] = isset($city) ? $city->id : NULL;
+                                }
+
+                                if (isset($dataToCreateEmployeePolicyMember['emp_id'])) {
+                                    $createdMember = EmployeeMembers::create($dataToCreateEmployeePolicyMember);
+                                }
+
+                                /** FLEX ENDROSMENT */
+                                $premiumLoadingLogic = env('PREMIUM_LOADING_LOGIC', NULL);
+
+
+                                if ($premiumLoadingLogic) {
+                                    $flexPlanId = $newPolicyFlexPlanId;
+
+                                    $employeeMembers = EmployeeMembers::where('employee_policy_mapping_id', $createdMember?->employee_policy_mapping_id)->get();
+
+                                    if (is_null($flexPlanId)) {
+                                        $flexPlanId = $employeeMembers->first()?->new_policy_flex_plan_id;
+                                    }
+
+                                    if ($flexPlanId) {
+
+                                        $flexData = [
+                                            'employee_id' => $employeeExist?->id,
+                                            'policy_id' => $policyDetails?->id,
+                                            'suminsured' => $ipdSuminsuredValue,
+                                            'cover_start_date' => $employeeCoverStartDate,
+                                            'epr_id' => $createdMember?->employee_policy_mapping_id
+                                        ];
+
+                                        RaterCalculator::flexPremiumLoading($flexPlanId, $flexData, $employeeMembers);
+                                    }
+                                }
+
+
+
+
+                                /** END OF FLEX ENDROSEMENT */
+
+
+                                // Mails to be triggered after this.
+
+                                //update status of row to is processed.
+                                $chunkedMembersData->is_processed = 1;
+                                $chunkedMembersData->update();
+                                
+                            }
+                        // });
+                    } catch (Exception $e) {
+                        $errors = [
+                            'failed_to_process' => 'Failed to process data',
+                        ];
+                        $chunkedMembersData->has_errors = 1;
+                        $chunkedMembersData->errors = json_encode(array_values($errors));
+                        $chunkedMembersData->update();
+                        $jobStatus = ['status' => false, 'message' => 'Oops! Expected Error Occur.', 'log_message' => $e->getMessage(), 'error_trace' => $e->getTrace()];
+                        Log::info("763 : Failed to do endorsement", $jobStatus);
+                    }
+                }
+            } else {
+                Log::info("No data to process.");
+            }
+
+            $stillMoreDataToProcess = 0;
+            // $checkingDoesMoreDataIsAvaliableCount = EndrosementDataDump::where('excel_report_id', $this->excelReportId)->where('is_validated', 0)
+            //     ->where('is_processed', 0)->count();
+            $processingDone = false;
+            if ($processingDone) {
+                // $stillMoreDataToProcess = 1;
+                // if ($stillMoreDataToProcess == 1) {
+                //     NewMemberEndrosementJob::dispatch($this->policyId, $this->excelReportId, $this->typeId, $this->user, $this->isInception)->delay(2)->onQueue('endrosement');
+                // }
+            } else {
+                if ($this->isSmallJob) {
+                    $this->createExcelErrorReport();
+
+                    $policy = MasterPolicy::with('employer', 'policyType', 'policySubType', 'contactDetails')->where('id', $this->policyId)->first();
+                    $excelReport = ExcelErrorReports::where('id', $this->excelReportId)->first();
+
+                    $brokerEmail = $brokerSpocName = $employerEmail  = $employerSpocName = NULL;
+
+                    $contact = $policy?->contactDetails->where('type', 1)->first();
+                    if ($contact) {
+                        $brokerEmail = $contact?->contact_email;
+                        $brokerSpocName = $contact?->contact_name;
+                    }
+
+                    $contact1 = $policy?->contactDetails->where('type', 0)->first();
+                    if ($contact1) {
+                        $employerEmail = $contact1?->contact_email;
+                        $employerSpocName = $contact1?->contact_name;
+                    }
+
+
+                    $employerName = secure($policy?->employer?->name, 'D');
+
+                    $noOfEmployeesUploaded = $excelReport?->no_of_employees_uploaded;
+                    $noOfEmployeesFailedToUpload = $excelReport?->no_of_employees_failed_to_upload;
+
+                    $date = $excelReport ? Carbon::parse($excelReport->created_at)->toDateString() : NULL;
+                    $time = $excelReport ? Carbon::parse($excelReport->created_at)->toTimeString() : NULL;
+
+                    $uploadedFile = $excelReport->original_document_url;
+                    $errorFile = $excelReport->error_document_url;
+
+                    $endorsementType = "Member Addition";
+
+
+                    //New Email
+                    $newEmail = $policy?->employer?->new_email;
+
+
+                    if ($newEmail) {
+                        $employerLogoUrl = $policy?->employer?->media->isNotEmpty() ? $policy?->employer?->media?->last()->getFullUrl() : null;
+
+                        $memberAdditionTrigger = PolicySystemTriggerMapping::with('masterPolicy')->where('master_system_trigger_id', MasterSystemTrigger::MEMBER_ADDITION)->where('policy_id', $policy->id)->first();
+
+
+                        if ($memberAdditionTrigger?->to_trigger) {
+
+                            $emailRowData = [
+                                'employer_id' => $policy->employer_id,
+                                'broker_id' => $policy->broker_id,
+                                'policy_id' => $policy->id,
+
+                                'policy_name' => $policy->policy_name,
+                                'policy_number' => $policy->policy_number,
+                                'policy_start_date' => Carbon::parse($policy->start_date)->format('d-m-Y'),
+                                'policy_end_date' => Carbon::parse($policy->end_date)->format('d-m-Y'),
+                                'policy_type' => optional($policy->policySubType)->name ?? NULL,
+                                'endorsement_type' => $endorsementType,
+                                'uploaded_by' => secure($this->user->name, 'D') ?? NULL,
+                                'upload_date_time' => Carbon::parse($date)->format('d-m-Y') . ' ' . $time ?? NULL,
+                                'date' => $date,
+                                'time' => $time,
+                                'employer_name' => $employerName,
+                                'total_member_uploaded' => $noOfEmployeesUploaded + $noOfEmployeesFailedToUpload,
+                                'member_uploaded_successfully' => $noOfEmployeesUploaded ?? 0,
+                                'member_upload_failed' => $noOfEmployeesFailedToUpload ?? 0,
+                                'member_uploaded_file' => $uploadedFile,
+                                'member_uploaded_failed_file' => $errorFile ?? NULL,
+
+                                'broker_data' => newGetBrokerEmailData(),
+                                'employer_logo_url' => $employerLogoUrl,
+                            ];
+
+                            if ($employerEmail) {
+
+                                $emailRowData['broker_employer_name'] = $employerSpocName;
+
+                                $to = $employerEmail;
+                                $cc = NULL;
+                                SendEmail::memberAdditionMail($to, $cc, $emailRowData);
+                            }
+
+                            if ($brokerEmail) {
+
+                                $emailRowData['broker_employer_name'] = $brokerSpocName;
+
+                                $to = $brokerEmail;
+                                $cc = NULL;
+                                SendEmail::memberAdditionMail($to, $cc, $emailRowData);
+                            }
+                        }
+                    } else {
+                        if ($policy) {
+                            $mailData = [
+                                'policy_d' => $policy->id,
+                                'policy_name' => $policy->policy_name,
+                                'policy_number' => $policy->policy_number,
+                                'policy_start_date' => Carbon::parse($policy->start_date)->format('d-m-Y'),
+                                'policy_end_date' => Carbon::parse($policy->end_date)->format('d-m-Y'),
+                                'policy_type' => optional($policy->policySubType)->name ?? NULL,
+                                'endorsement_type' => $endorsementType,
+                                'employer_id' => $policy->employer_id,
+                                'broker_id' => $policy->broker_id,
+                                'currentUserName' => secure($this->user->name, 'D') ?? NULL,
+                                'broker_employer_name' => $brokerSpocName,
+                                'upload_date_time' => Carbon::parse($date)->format('d-m-Y') . ' ' . $time ?? NULL,
+                                'date' => $date,
+                                'time' => $time,
+                                'employer_name' => $employerName,
+                                'total_member_uploaded' => $noOfEmployeesUploaded,
+                                'member_uploaded_successfully' => $noOfEmployeesUploaded - $noOfEmployeesFailedToUpload ?? 0,
+                                'member_upload_failed' => $noOfEmployeesFailedToUpload ?? 0,
+                                'uploaded_file' => $uploadedFile,
+                                'member_uploaded_file' => $uploadedFile,
+                                'member_upload_failed_file' => $errorFile ?? NULL,
+                                'member_uploaded_failed_file' => $errorFile ?? NULL,
+                                'emailData' => [
+                                    'employer_id' => $policy->employer_id,
+                                    'broker_id' => $policy->broker_id,
+                                    'receiver_user_type' => 'Broker',
+                                ],
+                                'brokerData' => getBrokerEmailData(),
+                            ];
+
+                            $employerData = [
+                                'policy_d' => $policy->id,
+                                'policy_name' => $policy->policy_name,
+                                'policy_number' => $policy->policy_number,
+                                'policy_start_date' => Carbon::parse($policy->start_date)->format('d-m-Y'),
+                                'policy_end_date' => Carbon::parse($policy->end_date)->format('d-m-Y'),
+                                'policy_type' => optional($policy->policySubType)->name ?? NULL,
+                                'endorsement_type' => $endorsementType,
+                                'employer_id' => $policy->employer_id,
+                                'broker_id' => $policy->broker_id,
+                                'currentUserName' => secure($this->user->name, 'D') ?? NULL,
+                                'broker_name' => secure($this->user->name, 'D') ?? NULL,
+                                'broker_employer_name' => $employerSpocName,
+                                'upload_date_time' => Carbon::parse($date)->format('d-m-Y') . ' ' . $time ?? NULL,
+                                'date' => $date,
+                                'time' => $time,
+                                'employer_name' => $employerName,
+                                'total_member_uploaded' => $noOfEmployeesUploaded,
+                                'member_uploaded_successfully' => $noOfEmployeesUploaded - $noOfEmployeesFailedToUpload ?? 0,
+                                'member_upload_failed' => $noOfEmployeesFailedToUpload ?? 0,
+                                'uploaded_file' => $uploadedFile,
+                                'member_uploaded_file' => $uploadedFile,
+                                'member_upload_failed_file' => $errorFile ?? NULL,
+                                'member_uploaded_failed_file' => $errorFile ?? NULL,
+                                'emailData' => [
+                                    'employer_id' => $policy->employer_id,
+                                    'broker_id' => $policy->broker_id,
+                                    'receiver_user_type' => 'Broker',
+                                ],
+                                'brokerData' => getBrokerEmailData(),
+                            ];
+
+                            $templateName = 'MemberAddition';
+                            $appName = $appName = env('APP_NAME', 'Employee-Benefits');
+                            if ($appName == 'Employee-Benefits') {
+                                $memberAdditionTriggerDetails = PolicySystemTriggerMapping::with('masterPolicy')->where('master_system_trigger_id', MasterSystemTrigger::MEMBER_ADDITION)->where('policy_id', $policy->id)->first();
+                                if (!is_null($memberAdditionTriggerDetails)) {
+                                    if ($memberAdditionTriggerDetails->to_trigger == 1) {
+
+                                        if (!is_null($policy->employer_id) && !is_null($policy->id)) {
+                                            $systemTriggerTemplateExists = SystemTriggerTemplates::with('media', 'dynamicValues.masterDynamicValue')->whereHas('templateMappings', function ($query)  use ($policy) {
+                                                $query->where('employer_id', $policy->employer_id)->where('policy_id', $policy->id);
+                                            })->where('system_trigger_id', MasterSystemTrigger::MEMBER_ADDITION)->where('status', 1)
+                                                ->where('broker_id', $policy->broker_id)
+                                                ->latest()->first();
+                                        }
+
+                                        if ($systemTriggerTemplateExists) {
+
+                                            if (isset($brokerEmail)) {
+
+                                                $mailData['broker_employer_name'] = $brokerSpocName;
+
+                                                $htmlBody = addDynamicValuesToHtml($mailData, $systemTriggerTemplateExists);
+                                                $mailData['htmlBody'] = $htmlBody;
+                                                $mailData['image'] = optional(optional(optional($systemTriggerTemplateExists)->media)->last())->getFullUrl();
+                                                $mailData['checkView'] = 'customView';
+
+                                                Mail::to($brokerEmail)->send(new EndorsementMail($mailData));
+                                                createEmailLog($brokerEmail, 'MemberAddition', $mailData, $templateName, $mailData);
+                                            }
+
+                                            if (isset($employerEmail)) {
+
+                                                $mailData['broker_employer_name'] = $employerSpocName;
+
+                                                $htmlBody = addDynamicValuesToHtml($mailData, $systemTriggerTemplateExists);
+                                                $mailData['htmlBody'] = $htmlBody;
+                                                $mailData['image'] = optional(optional(optional($systemTriggerTemplateExists)->media)->last())->getFullUrl();
+                                                $mailData['checkView'] = 'customView';
+
+                                                Mail::to($employerEmail)->send(new EndorsementMail($mailData));
+                                                createEmailLog($employerEmail, 'MemberAddition', $mailData, $templateName, $mailData);
+                                            }
+                                        } else {
+                                            if (isset($brokerEmail)) {
+                                                // $mailData['broker_employer_name'] = $brokerSpocName;
+                                                Mail::to($brokerEmail)->send(new EndorsementMail($mailData));
+                                                createEmailLog($brokerEmail, 'MemberAddition', $mailData, $templateName, $mailData);
+                                            }
+                                            if (isset($employerEmail)) {
+                                                // $mailData['broker_employer_name'] = $employerSpocName;
+                                                Mail::to($employerEmail)->send(new EndorsementMail($employerData));
+                                                createEmailLog($employerEmail, 'MemberAddition', $employerData, $templateName, $employerData);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    /** Whatsapp and sms trigger */
+                    $memberAdditionWhatsappSMSTrigger = PolicySystemTriggerMapping::with('masterPolicy')
+                        ->where('master_system_trigger_id', MasterSystemTrigger::MEMBER_ADDITION)
+                        ->where('policy_id', $policy->id)->first();
+
+                    if (!is_null($memberAdditionWhatsappSMSTrigger)) {
+
+                        $policyBrokerContactDetails = $policy?->contactDetails->where('type', 1)->first();
+
+                        $date = $excelReport ? Carbon::parse($excelReport->created_at)->format('d/m/Y') : now()->format('d/m/Y');
+                        $time = $excelReport ? Carbon::parse($excelReport->created_at)->format('H:i:s') : now()->format('H:i:s');
+                        $uplodedUser = User::where('id', $excelReport->created_by)->first();
+
+                        if (!is_null($policyBrokerContactDetails->contact_number) && !is_null($uplodedUser)) {
+
+                            $data = [
+                                'mobile_no' => $policyBrokerContactDetails->contact_number,
+                                'employee_name' => $policyBrokerContactDetails->contact_name,
+                                'uploaded_by' => secure($uplodedUser?->name, 'D') ?? NULL,
+                                'date' => $date,
+                                'time' => $time,
+                                'broker_id' => $policy->broker_id,
+                                'employer_id' => $policy->employer_id,
+                                'employee_id' => NULL,
+                                'policy_id' => $policy->id,
+                                'user_id' => $uplodedUser->id,
+                            ];
+
+                            if ($memberAdditionWhatsappSMSTrigger->to_whatsapp_trigger == 1) {
+                                SendWhatsapp::memberAddition($data);
+                            }
+
+                            if ($memberAdditionWhatsappSMSTrigger->to_sms_trigger == 1) {
+                                SendSms::memberAdditionSMS($data);
+                            }
+                        }
+                    }
+                }
+
+
+
+                if ($this->isSmallJob) {
+                    // GetEnrollmentDataJob::dispatch($this->policyId)->onQueue('tpa');
+                    OptimizeGetEnrollmentDataJob::dispatch($this->policyId)->onQueue('tpa');
+                    Log::info("GetEnrollmentDataJob and GetClaimDetailsByPolicyNo job dispatched");
+                }
+            }
+        } catch (Exception $e) {
+            $errors = [
+                'failed_to_process' => 'Failed to process data',
+            ];
+            //            $individualMemberData->has_errors = 1;
+            //            $individualMemberData->errors = json_encode(array_values($errors));
+            //            $individualMemberData->update();
+            $jobStatus = ['status' => false, 'message' => 'Oops! Expected Error Occur.', 'log_message' => $e->getMessage(), 'error_trace' => $e->getTrace()];
+            Log::info("798 : Failed to do endorsement", $jobStatus);
+
+            $policy = MasterPolicy::with(['tpaServices'])
+                ->where('id', $this->policyId)
+                ->first();
+
+            Log::info("GetEnrollmentDataJob dispatched (catch)");
+        }
+    }

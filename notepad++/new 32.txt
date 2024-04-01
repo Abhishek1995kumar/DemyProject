@@ -1,0 +1,48 @@
+    public function index() {
+        // $school = School::with('students', 'city', 'state', 'country')->get();
+        $school = Student::with('school.city.state.country')->get();
+        // $school = Country::with('states')->first();
+        // $school = State::with('country', 'city')->first();
+        // $school = City::with('school', 'state', 'country')->where('id', 132783)->first();
+        return ["Data getting from school table", $school];
+    }
+	
+	
+
+            return Student::when($request->get('state_name'), function ($query, $val) use ($request) {
+                $query->where('school_id', function ($q) use ($val, $request) {
+                    $q->with('city_name', 'like', '%'.$val.'%');
+                    // if ($request->has('state_name')) {
+                    //     $q->where('state', '<>', $request->get('state_name'));
+                    // }
+                });
+            })->toSql();
+			
+			
+			
+
+        "school_id": 6,
+        "name": "Sourabh",
+        "age": 30,
+        "email": "sourabh01@fyntune.com",
+        "school": {
+            "id": 6,
+            "state_id": 4021,
+            "city_id": 133210,
+            "school_name": "DTU (Delhi Technical University)",
+            "school_email": "dtu@fyntune.com",
+            "city": {
+                "id": 133210,
+                "state_id": 4021,
+                "state_code": "DL",
+                "country_id": "101",
+                "country_code": "IN",
+                "city_name": "New Delhi",
+                "state": {
+                    "id": 4021,
+                    "country_id": 101,
+                    "country_code": "IN",
+                    "state_name": "Delhi",
+                }
+            }
+        }

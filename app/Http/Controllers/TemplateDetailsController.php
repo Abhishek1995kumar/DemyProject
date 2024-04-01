@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use Exception;
+use App\Models\DataType;
 use App\Models\Validation;
-use Illuminate\Http\Request;
 use App\Models\TemplateName;
+use Illuminate\Http\Request;
 use App\Models\TemplateFields;
 use App\Models\TemplatePayloadData;
 use Illuminate\Support\Facades\Validator;
@@ -63,10 +64,6 @@ class TemplateDetailsController extends Controller {
                             TemplateFields::insert($details);
 
                         };
-                        return response()->json([
-                            'status' => true,
-                            'data' => "template field created or updated successfully",
-                        ]);
 
                     } else {
                         return response()->json([
@@ -74,12 +71,16 @@ class TemplateDetailsController extends Controller {
                            'message' => 'Template id is not found, please you can check template id is manually.',
                         ]);
                     }
+
+                    return response()->json([
+                        'status' => true,
+                        'data' => "Template field and template name created successfully",
+                    ]);
+
+                } else {
+
                 }
 
-                return response()->json([
-                   'status' => true,
-                   'message' => 'Template Name and Template Field is saved successfully',
-                ]);
             }
 
         } catch (Exception $e) {
@@ -133,8 +134,7 @@ class TemplateDetailsController extends Controller {
 
                         if(!empty($deffierenceFieldDatabase)) {
                             $del = TemplateFields::where('template_name_id', $request->id)
-                                        ->whereIn('field_name', $deffierenceFieldDatabase)->get(); // whereIn -- jab data as a array/collection me ho tab ham whereIn ka use karte hai
-                            $del->delete();
+                                        ->whereIn('field_name', $deffierenceFieldDatabase)->delete(); // whereIn -- jab data as a array/collection me ho tab ham whereIn ka use karte hai
 
                         }
 
@@ -199,7 +199,7 @@ class TemplateDetailsController extends Controller {
     }
 
 
-    public function getTemplatePayloadDetails(Request $request) {
+    public function oldGetTemplatePayloadDetails(Request $request) {
         try{
             $rules = [
                 'data' => 'array',
@@ -224,7 +224,7 @@ class TemplateDetailsController extends Controller {
                         $q->where('template_name_id', $request->template_id);
                     });
                 })->with('templateField')->get();
-
+                
                 if($templateNameRecord) {
                     if($request->has('payload')) {
                         $templatePayloadFieldData = [];
@@ -232,20 +232,50 @@ class TemplateDetailsController extends Controller {
                             $templatePayloadFieldData[$key] = $value;
                             
                         }
+                        
                         $errorFields = [];
+                        $validationDetails  = [];
+                        $dataTypeDetails  = [];
+                        $fieldValues  = [];
                         foreach($templateNameRecord as $key => $value) {
                             $fieldKeys = array_keys($request->payload);
+                            $fieldValues = array_values($request->payload);
                             $fieldName = $value->templateField->pluck('field_name')->toArray();
+                            $validationId = $value->templateField->pluck('validation_id')->toArray(); 
+                            $dataTypeId = $value->templateField->pluck('data_type_id')->toArray();
+
                             $templatePayloadFieldDataId = $value->id;
-
+                            
                             $errorFields = array_diff($fieldKeys, $fieldName);
-
+                            $dataTypeDetails = $dataTypeId;
+                            $validationDetails = $validationId;
+                            
                         }
+
+                        $validationFromDatabase = Validation::whereIn('id', $validationDetails)->pluck('id')->toArray();
+                        $datatypeFromDatabase = DataType::whereIn('id', $dataTypeDetails)->get(['id', 'data_type_value'])->toArray();
+
                         if(empty($errorFields)) {
                             $payloadDetails = new TemplatePayloadData();
                             $payloadDetails->template_name_id = $templatePayloadFieldDataId;
                             $payloadDetails->data = $templatePayloadFieldData;
-                            $payloadDetails->save();
+
+                            $datatypeFromDatabaseId = [];
+                            $datatypeFromDatabaseValue = [];
+                            foreach($datatypeFromDatabase as $datatype) {
+                                $datatypeFromDatabaseValue = $datatype['data_type_value'];
+                                $datatypeFromDatabaseId = $datatype['id'];
+                            }
+                            
+                            if($datatypeFromDatabaseValue && $datatypeFromDatabaseValue !== $request->payload) {
+                                return response()->json([
+                                    'status' => false,
+                                    'errors' => $fieldKeys . ''
+                                ]);
+                            } else {
+                                // $payloadDetails->save();
+                            }
+                            
                             return response()->json([
                                'status' => true,
                                'message' => 'Template payload is saved successfully',
@@ -307,5 +337,102 @@ class TemplateDetailsController extends Controller {
     }
 
 
+
+    public function getTemplatePayloadDetails(Request $request) {
+        try {
+            $rules = [
+                'data' => 'array',
+                'template_id' => 'required|exists:template_names,id',
+            ];
+
+            $message = [
+                'data' => 'Data field is like array, please use the valid data type',
+                'template_id' => 'Template id field is required, please select a template id'
+            ];
+
+            $validator = Validator::make($request->all(), $rules, $message);
+            
+            if($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors()
+                ]);
+            }
+            
+            $templateDetails = TemplateFields::where('template_name_id', $request->template_id)->get();
+            
+            if($templateDetails) { 
+                if(empty($request->has('payload'))) {
+                    return response()->json([
+                        'status' => true,
+                        'error' => "Payload template data id empty, please fill all template fields and after try again",
+                    ]);
+                }
+
+                $errorFields = [];
+                $errorDataType = [];
+                $errorValidation = [];
+                $templateId = [];
+                $validationFromTemplateFieldId = [];
+                $datatypeFromTemplateFieldId = [];
+                foreach($templateDetails as $payload) {
+                    $templateId = $payload['template_id'];
+                    $validationFromTemplateFieldId[] = $payload->validation_id;
+                    $datatypeFromTemplateFieldId[] = $payload->data_type_id;
+                    $validationTableId = Validation::whereIn('id', $datatypeFromTemplateFieldId)->first();
+                    $dataTypeTableId = DataType::whereIn('id', $datatypeFromTemplateFieldId)->first();
+
+                    if (!in_array($payload->field_name, array_keys($request->payload))) {
+                        $errorFields[] = [
+                            "field_name" => $payload->field_name,
+                            "error" => "field is mandatory"
+                        ];
+                    }
+                    return gettype($request->payload[$payload->field_name]);
+                    if($dataTypeTableId->data_type_value !== gettype($request->payload[$payload->field_name])) {
+                        $errorDataType[] = [
+                            "field_name" => $payload->field_name,
+                            "error" => "data type is not matching"
+                        ];
+                    }
+
+                    // if($validationTableId->validation_value !== $request->payload[$payload->field_name]) {
+                    //     $errorValidation[] = [
+                    //         "field_name" => $payload->field_name,
+                    //         "error" => "validation error"
+                    //     ];
+                    // }
+                }
+
+                if(empty($errorFields)) {
+                    return response()->json([
+                        'status' => false,
+                        'errors' => $errorFields
+                    ]);  
+                }
+
+                if(!empty($errorDataType)) {
+                    return response()->json([
+                        'status' => false,
+                        'errors' => $errorDataType
+                    ]);    
+                }
+
+                foreach($templateDetails as $key => $value) {
+                    $templateDetailsSave = new TemplatePayloadData();
+                    $templateDetailsSave = $templateDetails->template_name_id;
+                    return $templateDetailsSave;
+                    
+                }
+            }
+
+        } catch(Exception $e) { 
+            return response()->json([
+                'status' => false,
+                'errors' => $e->getMessage()
+            ]);
+        }
+
+    }
 
 }

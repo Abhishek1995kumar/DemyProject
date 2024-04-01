@@ -1,0 +1,92 @@
+PasswordTraits --- Line no 182
+
+                            // $data = DumpDefaultPassword::
+                            //         with('employeeTable.user','employerDefaultPasswordConfigurator','masterDefaultPassword')
+                            //         ->where('employer_id', $dumpPasswordSave->employer_id)->get();
+                            // $defaultPassword = NULL;
+                            // foreach ($data as $key=>$item) {
+                            //     if($item->default_password_format_id == 4){
+                            //         $name = secure($item->employeeTable->user->name, 'D');
+                            //         $defaultPassword = str_replace(' ','',$name.'@'.$item->employee_code);
+                            //         // return ["EmployeeName@EmployeeCode", $defaultPassword];
+                                    
+                            //     } elseif($item->default_password_format_id == 2) {
+                            //         $defaultPassword = str_replace(' ','', $item->employee_code.'@'.$item->employeeTable->doj);
+                            //         // return ["EmployeeCode@DOJ", $defaultPassword];
+                                    
+                            //     } elseif($item->default_password_format_id == 3) {
+                            //         $defaultPassword = str_replace(' ','',$item->employee_code.'@'.$item->employeeTable->dob);
+                            //         // return ["EmployeeCode@DOB", $defaultPassword];
+        
+                            //     } elseif($item->default_password_format_id == 8){
+                            //         $name = secure($item->employeeTable->user->name, 'D');
+                            //         $defaultPassword = str_replace(' ','',$item->employeeTable->doj.'@'.$item->employee_code);
+                            //         // return ["DOJ@EmployeeCode", $defaultPassword];
+        
+                            //     } elseif($item->default_password_format_id == 5){
+                            //         $name = secure($item->employeeTable->user->name, 'D');
+                            //         $defaultPassword = str_replace(' ','',$item->employee_code.'@'.$name);
+                            //         // return ["EmployeeCode@EmployeeName", $defaultPassword];
+        
+                            //     } elseif($item->default_password_format_id == 6){
+                            //         $name = secure($item->employeeTable->user->name, 'D');
+                            //         $defaultPassword = str_replace(' ','',$name . '@'. $item->employeeTable->dob);
+                            //         // return ["EmployeeName@DOB", $defaultPassword];
+        
+                            //     } elseif($item->default_password_format_id == 7){
+                            //         $name = secure($item->employeeTable->user->name, 'D');
+                            //         $defaultPassword = str_replace(' ','',$name . '@'.$item->employeeTable->doj);
+                            //         // return ["EmployeeName@DOJ", $defaultPassword];
+        
+                            //     } elseif($item->default_password_format_id == 9){
+                            //         $val = explode("@",$item->employeeTable->user->email);
+                            //         $defaultPassword = str_replace(' ','',$item->employee_code.'@'.$val[1]);
+                            //         // return ["EmployeeCode@DomainName", $defaultPassword];
+                            //     }
+                            //     if($defaultPassword){
+                            //         $password = DumpDefaultPassword::where('id',$lastIds)->first();
+                            //         $password->password_name = $defaultPassword;
+                            //         $password->save();
+                            //     }
+                            // }
+							
+							
+							
+                                            if($password->default_password_format_id == 4){
+                                                $name = secure($password->employeeTable->user->name, 'D');
+                                                $defaultPassword = str_replace(' ','',$name.'@'. $dumpPasswordSave->employee_code);
+                                                // return ["EmployeeName@EmployeeCode", $defaultPassword];
+                                                
+                                            } elseif($password->default_password_format_id == 2) {
+                                                $defaultPassword = str_replace(' ','', $dumpPasswordSave->employee_code .'@'.$password->employeeTable->doj);
+                                                // return ["EmployeeCode@DOJ", $defaultPassword];
+                                                
+                                            } elseif($password->default_password_format_id == 3) {
+                                                $defaultPassword = str_replace(' ','', $dumpPasswordSave->employee_code .'@'.$password->employeeTable->dob);
+                                                // return ["EmployeeCode@DOB", $defaultPassword];
+            
+                                            } elseif($password->default_password_format_id == 8){
+                                                $name = secure($password->employeeTable->user->name, 'D');
+                                                $defaultPassword = str_replace(' ','',$password->employeeTable->doj.'@'. $dumpPasswordSave->employee_code);
+                                                // return ["DOJ@EmployeeCode", $defaultPassword];
+            
+                                            } elseif($password->default_password_format_id == 5){
+                                                $name = secure($password->employeeTable->user->name, 'D');
+                                                $defaultPassword = str_replace(' ','', $dumpPasswordSave->employee_code .'@'.$name);
+                                                // return ["EmployeeCode@EmployeeName", $defaultPassword];
+            
+                                            } elseif($password->default_password_format_id == 6){
+                                                $name = secure($password->employeeTable->user->name, 'D');
+                                                $defaultPassword = str_replace(' ','',$name . '@'. $password->employeeTable->dob);
+                                                // return ["EmployeeName@DOB", $defaultPassword];
+            
+                                            } elseif($password->default_password_format_id == 7){
+                                                $name = secure($password->employeeTable->user->name, 'D');
+                                                $defaultPassword = str_replace(' ','',$name . '@'. $password->employeeTable->doj);
+                                                // return ["EmployeeName@DOJ", $defaultPassword];
+            
+                                            } elseif($password->default_password_format_id == 9){
+                                                $val = explode("@",$password->employeeTable->user->email);
+                                                $defaultPassword = str_replace(' ','', $dumpPasswordSave->employee_code .'@'.$val[1]);
+                                                // return ["EmployeeCode@DomainName", $defaultPassword];
+                                            }

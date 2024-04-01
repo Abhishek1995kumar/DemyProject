@@ -1,0 +1,71 @@
+ <div class="row m-t-30">
+        <div class="col-md-12">
+            <!-- DATA TABLE-->
+            <div class="table-responsive m-b-10">
+                <table class="table table-borderless table-data3">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Comments</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($data as $list)
+                        <tr>
+                            <td>{{$list->id}}</td>
+                            <td>{{$list->size}}</td>
+                            <td>
+                                <a href="{{url('blog/comments')}}/{{$list->id}}"><button type="button" class="btn btn-success">Edit</button></a>
+
+                                @if($list->status==1)
+                                    <a href="{{url('blog/status/0')}}/{{$list->id}}"><button type="button" class="btn btn-primary">Active</button></a>
+                                 @elseif($list->status==0)
+                                    <a href="{{url('blog/status/1')}}/{{$list->id}}"><button type="button" class="btn btn-warning">Deactive</button></a>
+                                @endif
+
+                                <a href="{{url('blog/delete/')}}/{{$list->id}}"><button type="button" class="btn btn-danger">Delete</button></a>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            <!-- END DATA TABLE-->
+        </div>
+		
+		
+		
+		
+		
+		
+		
+		                <form action="{{url('blog/comment')}}" method="post">
+                    @csrf
+                    <div class="col-12">
+                        <div class="form-floating mb-3">
+                            <input type="contant" class="form-control" name="contant" id="contant" value="" placeholder="Blog Contant" required>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-floating mb-3">
+                            <input type="number" class="form-control" name="user_id" id="user_id" value="" placeholder="Blog user id" >
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-floating mb-3">
+                            <input type="number" class="form-control" name="parent_id" id="parent_id" value="" placeholder="Blog parent id" >
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-floating mb-3">
+                            <input type="number" class="form-control" name="post_id" id="post_id" value="" placeholder="Blog post id">
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-floating mb-3">
+                            <input type="text" class="form-control" name="content" id="content" value="" placeholder="Blog Content" required>
+                        </div>
+                    </div>
+                    <button class="au-btn au-btn--block au-btn--green m-b-15" type="submit">Submit</button>                                
+                </form>

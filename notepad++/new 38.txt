@@ -1,0 +1,12 @@
+return new class extends Migration {
+    public function up()
+    {
+        Schema::create('admins', function (Blueprint $table) {
+            $table->id();
+            $table->tinyInteger('role')->nullable()->comment("1:Super Admin, 2:Admin, 3:Order Admin, 4:Data Entry, 5:Grossory Department Head, 6:Medical Department Head, 7:Marketing, 8:Operations Management, 9:Accounting and Finance, 10:Research and Development (R&D), 11:Production Head")->default("2")->unsigned();
+            $table->string('username', 100)->comment("Admin Username Details");
+            $table->unsignedBigInteger('phone')->comment("Admin Contact Details")->unsigned();
+            $table->text('address')->nullable();
+		}
+	}
+}

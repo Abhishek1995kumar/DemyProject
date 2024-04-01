@@ -1,0 +1,79 @@
+[
+    {
+        "id": 1,
+        "employer_id": 9,
+        "employee_code": "EMP301",
+        "default_password": "EmployeeName@DOB",
+        "employee_table": [
+            {
+                "id": 1,
+                "user_id": 46,
+                "employer_id": 9,
+                "code": "EMP301",
+                "user": {
+                    "id": 46,
+                    "email": "EMP301@fyntune.com",
+                    "default_password": "",
+                }
+            }
+        ]
+    },
+    {
+        "id": 2,
+        "employer_id": 9,
+        "employee_code": "EMP302",
+        "default_password": "EmployeeCode@DOJ",
+        "employee_table": [
+            {
+                "id": 2,
+                "user_id": 47,
+                "employer_id": 9,
+                "code": "EMP302",
+                "user": {
+                    "id": 47,
+                    "email": "EMP302@fyntune.com",
+                    "default_password": "Test@100",
+                }
+            }
+        ]
+    },
+    {
+        "id": 3,
+        "employer_id": 9,
+        "employee_code": "EMP303",
+        "default_password": "EmployeeName@DOB",
+        "employee_table": [
+            {
+                "id": 3,
+                "user_id": 48,
+                "employer_id": 9,
+                "code": "EMP303",
+                "user": {
+                    "id": 48,
+                    "email": "EMP303@fyntune.com",
+                    "default_password": "",
+                }
+            }
+        ]
+    },
+    {
+        "id": 4,
+        "employer_id": 9,
+        "employee_code": "EMP304",
+        "default_password": "DOJ@EmployeeCode",
+        "employee_table": [
+            {
+                "id": 4,
+                "user_id": 49,
+                "employer_id": 9,
+                "code": "EMP304",
+                "user": {
+                    "id": 49,
+                    "email": "EMP304@fyntune.com",
+                    "default_password": "Test@100",
+                }
+            }
+        ]
+    },
+]
+

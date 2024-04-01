@@ -1,0 +1,33 @@
+														Error
+														
+1) Exception: Property [templateField] does not exist on this collection instance.
+Ans) --	in query get() is not we use first()
+
+
+                           $payload = [
+                                    'template_name_id' => $templateNameRecord->id,
+                                    'template_field_id' => $request->field_name,
+                                    'value' => $value,
+                                   'status' => $request->status ?? 1,
+                                    'created_at' => now() ?? NULL,
+                                    'updated_at' => now() ?? NULL
+                                ];
+                                TemplatePayloadData::insert($payload);
+                            };
+
+                            return response()->json([
+                               'status' => true,
+                               'message' => 'Template Payload is saved successfully',
+                            ]);
+							
+							
+				               $errorFields = array_diff($fieldName, $fieldKeys);
+                    $errorValue = array_values($errorFields);
+                    if ($errorFields) {
+                        return response()->json([
+                            'status' => false,
+                            'missing_fields' => $errorValue,
+                        ]);
+                    }
+
+

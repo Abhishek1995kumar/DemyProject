@@ -1,0 +1,125 @@
+														GIT HUB COMMANDS
+
+usage: git remote [-v | --verbose]
+   or: git remote add [-t <branch>] [-m <master>] [-f] [--tags | --no-tags] [--mirror=<fetch|push>] <name> <url>
+   or: git remote rename [--[no-]progress] <old> <new>
+   or: git remote remove <name>
+   or: git remote set-head <name> (-a | --auto | -d | --delete | <branch>)
+   or: git remote [-v | --verbose] show [-n] <name>
+   or: git remote prune [-n | --dry-run] <name>
+   or: git remote [-v | --verbose] update [-p | --prune] [(<group> | <remote>)...]
+   or: git remote set-branches [--add] <name> <branch>...
+   or: git remote get-url [--push] [--all] <name>
+   or: git remote set-url [--push] <name> <newurl> [<oldurl>]
+   or: git remote set-url --add <name> <newurl>
+   or: git remote set-url --delete <name> <url>
+
+
+…or create a new repository on the command line
+echo "# DemyProject" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/Abhishek1995kumar/DemyProject.git
+git push -u origin main
+
+
+
+or push an existing repository from the command line
+git remote add origin https://github.com/Abhishek1995kumar/DemyProject.git
+git branch -M main
+git push -u origin main
+
+            $rules = [
+                'employee_details'  => 'required',
+                'employee_details.fields.*.id' => 'required|integer|exists:default_endrosement_format_feilds_mappings,id,custom_enrollment_group_id,'. self::EMPLOYEE_DETAILS_GROUP,
+                'employee_details.fields.*.is_mandatory' => 'sometimes|required|integer',
+                'employee_details.fields' => ['required',
+                                                    function ($attribute, $value, $fail) {
+                                                        $requiredValues = DefaultEndrosementFormatFeildsMapping::
+                                                                         where('custom_enrollment_group_id', self::EMPLOYEE_DETAILS_GROUP)
+                                                                         ->where('is_mandatory', 1)
+                                                                         ->pluck('id')->toArray();
+                                                        $inputIds = array_column($value, 'id');
+                                                        if (count(array_intersect($requiredValues, $inputIds)) != count($requiredValues)) {
+                                                            $fail('All mandatory fields must be sent');
+                                                        }
+                                                    },],
+                'employee_details.fields.*.sequence' => 'required|integer',
+                'insured_member_details'  => 'required',
+                'insured_member_details.fields.*.id' => 'required|integer|exists:default_endrosement_format_feilds_mappings,id,custom_enrollment_group_id,'. self::INSURED_MEMBER_DETAILS_GROUP,
+                'insured_member_details.fields.*.is_mandatory' => 'sometimes|required|integer',
+                'insured_member_details.fields' => ['required',
+                                                        function ($attribute, $value, $fail) {
+                                                            $requiredValues = DefaultEndrosementFormatFeildsMapping::
+                                                                            where('custom_enrollment_group_id', self::INSURED_MEMBER_DETAILS_GROUP)
+                                                                            ->where('is_mandatory', 1)
+                                                                            ->pluck('id')->toArray();
+                                                            $inputIds = array_column($value, 'id');
+                                                            if (count(array_intersect($requiredValues, $inputIds)) != count($requiredValues)) {
+                                                                $fail('All mandatory fields must be sent');
+                                                            }
+                                                        },],
+                'insured_member_details.fields.*.sequence' => 'required|integer',
+                'nominee_details'  => 'required',
+                'nominee_details.fields.*.id' => 'sometimes|required|integer|exists:default_endrosement_format_feilds_mappings,id,custom_enrollment_group_id,'. self::NOMINEE_DETAILS_GROUP,
+                'nominee_details.fields.*.is_mandatory' => 'sometimes|required|integer',
+                'nominee_details.fields' => ['required',
+                                                    function ($attribute, $value, $fail) {
+                                                        $requiredValues = DefaultEndrosementFormatFeildsMapping::
+                                                                        where('custom_enrollment_group_id', self::NOMINEE_DETAILS_GROUP)
+                                                                        ->where('is_mandatory', 1)
+                                                                        ->pluck('id')->toArray();
+                                                        $inputIds = array_column($value, 'id');
+                                                        if (count(array_intersect($requiredValues, $inputIds)) != count($requiredValues)) {
+                                                            $fail('All mandatory fields must be sent');
+                                                        }
+                                                    },],
+                'nominee_details.fields.*.sequence' => 'sometimes|required|integer',
+                'template_name' => 'required',
+            ];
+
+
+
+
+
+                if ($templateDetails) {
+                    if ($request->has('payload')) {
+                        $templateFieldNames = $templateDetails->templateField->pluck('field_name')->toArray();
+                        $payloadFields = collect($request->payload);
+                        
+                        $newFields = $payloadFields->filter(function ($payloadField) use ($templateFieldNames) {
+                            return !in_array($payloadField['field_name'], $templateFieldNames);
+                        });
+
+                        // $newFields->each(function ($newField) use ($templateDetails) {
+                        //     $templateField = new TemplateFields();
+                        //     $templateField->template_name_id = $templateDetails->id;
+                        //     $templateField->field_name = $newField['field_name'];
+                        //     $templateField->validation_id = $newField['validation_id']; 
+                        //     $templateField->data_type_id = $newField['data_type_id'];
+                        //     $templateField->save();
+                        // });
+
+                        foreach($newFields as $value) {
+                            $templateField = new TemplateFields();
+                            $templateField->template_name_id = $templateDetails->id;
+                            foreach($value as $field) {
+                                $templateField->field_name = $value['field_name'];
+                                $templateField->validation_id = $value['validation_id'];
+                                $templateField->data_type_id = $value['data_type_id'];
+                                $templateField->is_mandatory = $value['is_mandatory'];
+                                $templateField->status = 1;
+                                $templateField->created_at = now();
+                                $templateField->updated_at = now();
+                            }
+                            $templateField->save();
+                        }
+
+                        return response()->json([
+                            'status' => true,
+                            'message' => 'Template field is updated successfully', 
+                        ]);
+                    }
+                }

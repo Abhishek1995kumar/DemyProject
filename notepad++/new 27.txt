@@ -1,0 +1,32 @@
+                        if($password->default_password_format_id == 4){
+                            $name = secure($password->employeeTable->user->name, 'D');
+                            $defaultPassword = str_replace(' ','',$name.'@'. $item->employee_code);
+                            
+                        } elseif($password->default_password_format_id == 2) {
+                            $defaultPassword = str_replace(' ','', $item->employee_code .'@'.$password->employeeTable->doj);
+                            
+                        } elseif($password->default_password_format_id == 3) {
+                            $defaultPassword = str_replace(' ','', $item->employee_code .'@'.$password->employeeTable->dob);
+    
+                        } elseif($password->default_password_format_id == 8) {
+                            $name = secure($password->employeeTable->user->name, 'D');
+                            $defaultPassword = str_replace(' ','',$password->employeeTable->doj.'@'. $item->employee_code);
+    
+                        } elseif($password->default_password_format_id == 5) {
+                            $name = secure($password->employeeTable->user->name, 'D');
+                            $defaultPassword = str_replace(' ','', $item->employee_code .'@'.$name);
+    
+                        } elseif($password->default_password_format_id == 6) {
+                            $name = secure($password->employeeTable->user->name, 'D');
+                            $defaultPassword = str_replace(' ','',$name . '@'. $password->employeeTable->dob);
+    
+                        } elseif($password->default_password_format_id == 7) {
+                            $name = secure($password->employeeTable->user->name, 'D');
+                            $defaultPassword = str_replace(' ','',$name . '@'. $password->employeeTable->doj);
+    
+                        } elseif($password->default_password_format_id == 9) {
+                            $val = explode("@",$password->employeeTable->user->email);
+                            $defaultPassword = str_replace(' ','', $item->employee_code .'@'.$val[1]);
+                        }
+                        $item->password_name = $defaultPassword;
+                        $item->save();

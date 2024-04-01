@@ -1,0 +1,21 @@
+<?php
+
+namespace App\Http\Controllers;
+use Illuminate\Http\Request;
+use App\Traits\PasswordTrait;
+
+
+class PasswordController extends Controller {
+    use PasswordTrait;
+    public function downloadSampleExcelPassword($request) {
+        return $this->sampleExcelPassword($request);
+    } 
+
+    public function uploadDefaultPasswordExcel(Request $request){
+        return $this->uploadPassword($request);
+    }
+
+    public function singleDefaultPassword(Request $request) {
+        return $this->singlePassword($request);
+    }
+}

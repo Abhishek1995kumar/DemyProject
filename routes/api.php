@@ -2,15 +2,16 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\CityController;
+// use App\Http\Controllers\CityController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductBrandController;
 use App\Http\Controllers\SubCategoryController;
 use App\Http\Controllers\CategoryController;
-use App\Http\Controllers\UserDetailsController;
+// use App\Http\Controllers\UserDetailsController;
 use App\Http\Controllers\TemplateDetailsController;
+use App\Http\Controllers\StudentController;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -65,4 +66,5 @@ Route::post('template/payload/save', [TemplateDetailsController::class, 'getTemp
 Route::post('template/name-field/update', [TemplateDetailsController::class, 'updateTemplateNameField']);
 
 
+Route::post('template/name-field/store', [StudentController::class, 'store']);
 

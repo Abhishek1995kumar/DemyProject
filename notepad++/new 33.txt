@@ -1,0 +1,70 @@
+public function runQueueJobs()
+{
+    // some initial data
+    $data = [
+        'first_argument' => 111,
+        'second_argument' => 222,
+    ];
+
+    // chaining synchronous batches
+    $batch = Bus::chain([
+        new FirstBatchJob($data['first_argument']), // common job in app/Jobs/FirstBatchJob.php
+        $second_batch = function () use ($data) {
+            $batch_unique_name = $this->getBatchName($data['second_argument']);
+
+            // CHUNKS USAGE EXAMPLE
+
+            // get ready for starting concurrent job instances
+            $chunk_intervals = [];
+            for ($i = 0; $i < 100; $i++) {
+                // common job in app/Jobs/SecondBatchJob.php
+                $chunk_intervals[] = new SecondBatchJob($data['second_argument'], [$i * 1000, ($i + 1) * 1000 - 1]);
+            }
+
+            // asynchronous/concurrent batch jobs
+            Bus::batch($chunk_intervals)
+                ->then(function (Batch $concurrent_batch) use ($data) {
+                    info("SecondBatchJob jobs have done.");
+                })
+                ->catch(function (Batch $concurrent_batch, Throwable $e) use ($data) {
+                    info("SecondBatchJob error! - " . $e->getMessage());
+                })
+                ->finally(function (Batch $concurrent_batch) use ($data) {
+                    info("SecondBatchJob batch has finished executing.");
+                })
+                ->name($batch_unique_name)
+                ->dispatch();
+        },
+    ])->dispatch();
+
+    // response back to the client
+    return response()->json([
+        'success' => true,
+        'message' => "Batch Jobs successfully run.",
+    ]);
+}
+
+
+
+
+public function batchInfo(BatchInfoRequest $request)
+{
+    // getting "batch_unique_name" from client
+    $batch_unique_name = $request->get('batch_unique_name');
+
+    // getting appropriate "batch_id" from somewhere, where we've stored that "batch_id"<->"batch_unique_name" relation
+    $batch_id = $this->getBatchIdFromUniqueName($batch_unique_name);
+
+    // getting appropriate batch_id
+    $batch = Bus::findBatch($batch_id);
+
+    // response back to the client
+    if ($batch) {
+        return response()->json($batch);
+    } else {
+        return response()->json([
+            'success' => false,
+            'message' => "Batch not found!",
+        ]);
+    }
+}

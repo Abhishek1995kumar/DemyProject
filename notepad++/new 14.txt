@@ -1,0 +1,95 @@
+    protected function uploadPassword(Request $request){
+        $rules = [
+            'employer_id'                => 'required',
+            // 'employee_code'              => 'required|unique:dump_default_passwords',
+            'default_password_sheet'     => 'required|file|mimes:xls,xlx,xlsx',
+            'default_password_format_id' => 'required',
+        ];
+        $customs = [
+            'default_password_sheet.mimes' => 'The : Please select should be Valid Excel File.',
+        ];
+        $validation = Validator::make($request->all(), $rules, $customs);
+        if($validation->fails()){
+            return response()->json([
+                'status'=> false,
+                'errors'=> $validation->errors()
+            ]);
+        }
+        $user = $request->user();
+        if($user){
+            try{
+                $sheetEmpty = 0;
+                $excelRecordId = 0;
+                ini_set('memory_limit','-1');
+                ini_set('max_execution_time',0);
+                set_time_limit(0);
+                $employerId = $request->employer_id;
+                $defaultPasswordFormatId = $request->default_password_format_id;
+                $diskSave = env('MEDIA_DISK', 'public');
+                $file = $request->file('default_password_sheet');
+                $fileName = time().$file->getClientOriginalName();
+                $fileUrl = $file->storeAs('User/DefaultPassword/Upload', $fileName, $diskSave);
+                try{
+                    $errorReport = new ExcelErrorReports();
+                    $errorReport->employer_id = $employerId;
+                    $errorReport->document_type_id = ExcelErrorReports::USER_DEFAULT_PASSWORD;
+                    $errorReport->original_document_url = Storage::disk($diskSave)->url($fileUrl) ? Storage::disk($diskSave)->url($fileUrl) : NULL;
+                    $errorReport->status = ExcelErrorReports::PROCESSING;
+                    $errorReport->created_by = $user->id;
+                    $errorReport->save();
+                    $errorReportId = $errorReport->id;
+                    try{
+                        $excelData = Excel::toArray(new DefaultPasswordImport($user, $employerId, $defaultPasswordFormatId, $errorReportId), $fileUrl, $diskSave);
+                    } catch (Exception $e){
+                        Log::error($e);
+                    }
+
+                    try{
+                        if(!isset($excelData[0][0])){
+                            $sheetEmpty = 1;
+                            $deleteExcel = ExcelErrorReports::find($errorReportId);
+                            if(!empty($deleteExcel)){
+                                $deleteExcel->delete();
+                            }
+                        } else {
+                            foreach($excelData[0]  as $key => $val){
+                                if(!empty($val['employee_code']) && !empty($defaultPasswordFormatId)){
+                                    $dumpPasswordSave = new DumpDefaultPassword();
+                                    $dumpPasswordSave->default_password_format_id = $defaultPasswordFormatId;
+                                    $dumpPasswordSave->employer_id = $employerId;
+                                    $dumpPasswordSave->excel_report_id = $errorReportId;
+                                    $dumpPasswordSave->employee_code = $val['employee_code'];
+                                    $dumpPasswordSave->save();
+                                }
+                            }
+                        }
+                    }catch(Exception $e){
+                        Log::error($e);
+                    }
+
+                    if($sheetEmpty == 1){
+                        return response()->json([
+                            'status' =>false,
+                            'message'=>'Sheet may be empty so please fill the all fields and upload again !!',
+                        ]);
+                    }else{
+                        $passwordJob = DefaultPasswordJob::dispatch($request->employer_id,$errorReportId);
+                        return [$request->employer_id, $errorReportId, $passwordJob];
+                        return response()->json([
+                            'status'=> true,
+                            'message'=> 'File uploaded successfully'
+                        ]);
+                    }
+                }catch(Throwable $e){
+                    Log::error($e);
+                }
+            }catch(Throwable $e){
+                Log::error($e);
+            }
+        }else{
+            return response()->json([
+                'status'=> false,
+                'message'=> "User Not Found !!"
+            ]);
+        }
+    }

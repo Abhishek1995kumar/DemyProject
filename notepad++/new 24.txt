@@ -1,0 +1,211 @@
+<?php
+
+namespace App\Traits;
+
+use DB;
+use Log;
+use Illuminate\Http\Request;
+use App\Models\MasterEmployers;
+use App\Models\DumpDefaultPassword;
+use App\Models\MasterDefaultPassword;
+use Illuminate\Support\Facades\Validator;
+use App\Models\EmployerDefaultPasswordConfigurator;
+use App\Http\Resources\MasterDefaultPasswordResource;
+use App\Http\Resources\EmployerDefaultPasswordResource;
+
+trait EmployerDefaultPasswordConfiguratorTrait {
+    public function masterDefaultPasswordTrait(){
+        try{
+            $defaultPassword = MasterDefaultPassword::where('status', '1')->get();
+            if(!is_null($defaultPassword)){
+                return response()->json([
+                    'status' => true,
+                    'data' => MasterDefaultPasswordResource::collection($defaultPassword),
+                ]);
+            }else{
+                return response()->json([
+                    'status' => false,
+                    'message' => "Data not Found",
+                ]);
+            }
+        }catch (\Exception $e){
+            return response()->json([
+                'status' => false,
+                'message'=> "function not work !!",
+            ]);
+        }
+    }
+
+    public function saveDefaultPasswordDetailsTrait(Request $request) {
+        try{
+            $rule = [
+                "employer_id"=> "required",
+                "default_password_format_id"=> "required"
+            ];
+            $validator = Validator::make($request->all(), $rule);
+            if ($validator->fails()) {
+                return response()->json([
+                    "status"=> false,
+                    "message"=> $validator->errors()->first(),
+                ]);
+            }else{
+                $defaultPasswordFormatId = $request->default_password_format_id;
+                $password = MasterDefaultPassword::where('id',$request->default_password_format_id)->first();
+                $name = $password->name;
+                $employerId = $request->employer_id;
+                if(!empty($defaultPasswordFormatId && $employerId)){
+                    $employerDefaultPasswordConfig = new EmployerDefaultPasswordConfigurator();
+                    $employerDefaultPasswordConfig->employer_id = $employerId ? $employerId : NULL;
+                    $employerDefaultPasswordConfig->default_password_format_id = $defaultPasswordFormatId ? $defaultPasswordFormatId : NULL;
+                    $employerDefaultPasswordConfig->pasword_name = $name ?? NULL;
+                    $employerDefaultPasswordConfig->save();
+                    $employerDefaultPasswordConfigLastId = $employerDefaultPasswordConfig->id ?? NULL;
+                    return response()->json([
+                        'status' => true,
+                        'message' => "Employer based Default Password Created Successfully !!"
+                    ], 200);
+                }else{
+                    return response()->json([
+                        "status"=> false,
+                        "message"=> "Please select details !!"
+                    ], 404);
+                }
+            }
+        }catch (\Exception $e){
+            return response()->json([
+                'status' => false,
+                'message'=> "function not work !!",
+            ]);
+        }
+    }
+
+    public function showDefaultPasswordDetailsTrait(Request $request){
+        try{
+            $employerAllDetails = EmployerDefaultPasswordConfigurator::with('employerDetails','defaultPasswordDetails')->get();
+            $data = [];
+            if(!empty($employerAllDetails)){
+                foreach($employerAllDetails as $key => $value){
+                    if($value->status == 1){
+                        $data[$key]['Employer Id'] = $value->employerDetails->id;
+                        $data[$key]['Employer Name'] = secure($value->employerDetails->name, "D");
+                        $data[$key]['Default Password Id'] = $value->defaultPasswordDetails->id;
+                        $data[$key]['Default Password Name'] = $value->defaultPasswordDetails->name;
+                    }
+                }
+                return response()->json([
+                    "status"=> true,
+                    "data"=> $data,
+                ], 200);
+            }else{
+                return response()->json([
+                    "status"=> false,
+                    "message"=> "Data not found !!"
+                ], 404);
+            }
+        }catch (\Exception $e){
+            return response()->json([
+                'status' => false,
+                'message'=> "function not work !!",
+            ]);
+        }
+    }
+
+    public function updateEmployerDefaultPasswordDetailsTrait(Request $request, $id){
+        try{
+            $rule = [
+                "employer_id"=> "required",
+                "default_password_format_id"=> "required"
+            ];
+            $validator = Validator::make($request->all(), $rule);
+            if ($validator->fails()) {
+                return response()->json([
+                    "status"=> false,
+                    "message"=> $validator->errors(),
+                ]);
+            }else{
+                // $updateEmployerDefaultPassword = EmployerDefaultPasswordConfigurator::findOrFail($id);
+                $updateEmployerDefaultPassword = EmployerDefaultPasswordConfigurator::where('id', $request->id)->first();
+                $password = MasterDefaultPassword::where('id', $request->default_password_format_id)->first();
+                if(!empty($updateEmployerDefaultPassword)){
+                    $updateEmployerDefaultPassword->employer_id = $request->employer_id;
+                    $updateEmployerDefaultPassword->default_password_format_id = $request->default_password_format_id ?? NULL;
+                    $updateEmployerDefaultPassword->pasword_name = $password->name ?? NULL;
+                    $updateEmployerDefaultPassword->save();
+                    return response()->json([
+                        'status' => true,
+                        'message' => "Employer based Default Password Updated Successfully !!"
+                    ], 200);
+                }else{
+                    return response()->json([
+                        "status"=> false,
+                        "message"=> "Please select details !!"
+                    ], 404);
+                }
+            }
+        }catch (\Exception $e){
+            return response()->json([
+                'status' => false,
+                'message'=> "function not work !!",
+            ]);
+        }
+    }
+
+    public function deleteEmployerDefaultPasswordDetailsTrait(Request $request) {
+        try{
+            $employerDefaultPassword = EmployerDefaultPasswordConfigurator::where("id", $request->id)->first();
+            if(!empty($employerDefaultPassword)){
+                if($employerDefaultPassword->status==1){
+                    if($employerDefaultPassword->status == 1){
+                        $employerDefaultPassword->delete();
+                        $updateStatus = $employerDefaultPassword->update(['status'=>0]);
+                        return response()->json([
+                            'status'=> true,
+                            'message'=> 'Employer details successfully deleted !!'
+                        ],204); // 204 should be resource deleted successfully .
+                    }else{
+                        return response()->json([
+                            'status'=> false,
+                            'message'=> 'Record already deleted !!'
+                        ], 500);
+                    }
+                }else{
+                    return response()->json([
+                        'status'=> false,
+                        'message'=> 'Record not found !!'
+                    ], 500);
+                }
+            }
+        }catch (\Exception $e){
+            return response()->json([
+                'status' => false,
+                'message'=> "function not work !!",
+            ]);
+        }
+    }
+
+    public function restoreEmployerDetailsTrait(Request $request) {
+        try {
+            $employerDefaultPasswordRestore = EmployerDefaultPasswordConfigurator::withTrashed()->where("id", $request->id)->first();
+            if(!empty($employerDefaultPasswordRestore)){
+                if($employerDefaultPasswordRestore->status==0){
+                    $employerDefaultPasswordRestore->restore();
+                    $employerDefaultPasswordRestore->update(['status'=>1]);
+                    return response()->json([
+                        'status' => true,
+                        'message' => " Employer Record recover Successfully !!",
+                    ], 201);
+                }
+            }else{
+                return response()->json([
+                    'status' => true,
+                    'message' => "Record not found !!",
+                ], 500);
+            }
+        }catch(\Exception $e){
+            return response()->json([
+                'status' => false,
+                'message'=>"function not work !!",
+            ]);
+        }
+    }
+}

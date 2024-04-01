@@ -1,0 +1,66 @@
+        try{
+            ini_set('memory_limit','-1');
+            ini_set('max_execution_time',0);
+            set_time_limit(0);
+            $employerValue   = $request->employerId;
+            $sheetErrorId    = $request->errorReportId;
+            $fileName   = $sheetErrorId .time(). '_default_password' .'.xls';
+            $successStatus = 'Employee Code updated successfully !!';
+            $failedStatus = 'Failed Updation !!';
+    
+            $sheetSuccessStatus = ExcelErrorReports::SUCCESS;
+            $sheetFailedStatus = ExcelErrorReports::FAILED;
+    
+            $totalEmployeeRecord = DumpDefaultPassword::where('excel_report_id', $request->errorReportId)->get();
+            $countErrorRecord = $totalEmployeeRecord->count();
+            $totalErrorRecord = $totalEmployeeRecord->where('has_errors', 1);
+    
+            $header = [];
+            array_push($header,'Employee Code');
+            array_push($header,'Default Password');
+            array_push($header,'Status');
+            array_push($header,'Reason');
+    
+            $errorReportId = 2611;
+            $totalEmployeeRecord = DumpDefaultPassword::where('excel_report_id', $errorReportId)->get();
+            $countErrorRecord = $totalEmployeeRecord->count();
+            $totalErrorRecord = $totalEmployeeRecord->where('has_errors', 1);
+            $totalErrorRecordCount = $totalEmployeeRecord->count();
+            $finalArrayRecord = [];
+            if($totalErrorRecord != NULL){
+                foreach($totalErrorRecord as $key=>$value){
+                    $arrayData = [];
+                    $arrayData['Employee Code']    = $value->employee_code;
+                    $arrayData['Default Password'] = $value->default_password;
+                    if($value->has_errors == 1){
+                        $arrayData['status'] = $sheetFailedStatus;
+                        $arrayData['reason'] = $value->errors;
+                    }else{
+                        $arrayData['status'] = $sheetSuccessStatus;
+                        $arrayData['status'] = '';
+                    }
+                    array_push($finalArrayRecord, $arrayData);
+                }
+    
+                $filePath = 'User/DefaultPassword/Error'. $fileName;
+                $diskToStore = env("MEDIA_DISK", 'public');
+                $data = collect($finalArrayRecord);
+                Excel::store(new DefaultExcelErrorExport($header, $data), $filePath, $diskToStore);
+                $storeErrorUrl = Storage::disk($diskToStore)->url($filePath);
+                $newStatus = $sheetFailedStatus;
+            }else{
+                $storeErrorUrl = NULL;
+                $newStatus = $sheetSuccessStatus;
+            }
+            
+            $errorExportData = ExcelErrorReports::where('id', $errorReportId)->first();
+            $errorExportData->status                           = $newStatus;
+            $errorExportData->error_document_url               = $storeErrorUrl ? $storeErrorUrl : NULL;
+            $errorExportData->no_of_employees_uploaded         = $countErrorRecord - $totalErrorRecordCount;
+            $errorExportData->no_of_employees_failed_to_upload = $totalErrorRecord;
+            $errorExportData->update();
+            return $errorExportData;
+    
+        }catch(\Exception $e){
+            return response()->json(['status'=> false,  'errors'=> $e->getMessage()]);
+        }

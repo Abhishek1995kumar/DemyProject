@@ -1,0 +1,269 @@
+<?php
+
+namespace App\Traits;
+
+use DB;
+use App\User;
+use Throwable;
+use Exception;
+use Illuminate\Http\Request;
+use App\Models\MasterEmployers;
+use App\Models\MasterEmployees;
+use App\Jobs\DefaultPasswordJob;
+use App\Jobs\TestPasswordJob;
+use App\Models\ExcelErrorReports;
+use Illuminate\Support\Facades\Log;
+use App\Models\DumpDefaultPassword;
+use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Hash;
+use App\Models\MasterDefaultPassword;
+use App\Exports\DefaultPasswordExport;
+use App\Imports\DefaultPasswordImport;
+use Illuminate\Support\Facades\Storage;
+use App\Exports\DefaultExcelErrorExport;
+use Illuminate\Support\Facades\Validator;
+use App\Models\EmployerDefaultPasswordConfigurator;
+trait PasswordTrait {
+    protected function sampleExcelPassword(Request $request) {
+        $rules = [
+            // 'defult_password' => 'required',
+        ];
+        try{
+            $validator = Validator::make($request->all(), $rules);
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false, 
+                    'errors' => $validator->errors(),
+                    Log::error('Validation is not work properly')
+                ]);
+            } else {
+                try{
+                    $excelFormattedRows = env('EXCEL_FORMATTED_ROWS', 100);
+                    $fileToBeName = 'user_default_password_mode-' . time() . '.xls';
+                    $filePath = 'User/DefaultPassword/Sample/' . $fileToBeName;
+                    $diskToStore = env("MEDIA_DISK", 'public');
+                    $data = [];
+                    $columnsName = [
+                        'Employee Code',
+                    ];
+                    $data = [
+                        'employee_code_index' => 0,
+                    ];
+                    Excel::store(new DefaultPasswordExport($columnsName, $excelFormattedRows, $data), $filePath, $diskToStore);
+                    return response()->json([
+                        'status' => true,
+                        'message'=> 'sheet is download successfully',
+                        'data'   => Storage::disk($diskToStore)->url($filePath)
+                    ]);
+                }catch(Exception $e){
+                    return response()->json([
+                        'status' => false,
+                        'message'=> 'Default Password Export is not export properly',
+                        Log::error('Default Password Export is not export properly')
+                    ]);
+                }
+            }
+        }catch(Exception $e){
+            return response()->json([
+                'status' => false,
+                'message'=> 'function not work',
+                Log::error('function not work')
+            ]);
+        }
+    }
+
+    protected function uploadPassword(Request $request){
+        $rules = [
+            'employer_id'                => 'required',
+            'default_password_sheet'     => 'required|file|mimes:xls,xlx,xlsx',
+            'default_password_format_id' => 'required',
+        ];
+
+        $customs = [
+            'default_password_sheet.mimes' => 'The : Please select should be Valid Excel File.',
+        ];
+
+        $validation = Validator::make($request->all(), $rules, $customs);
+        if($validation->fails()){
+            return response()->json([
+                'status'=> false,
+                'errors'=> $validation->errors()
+            ]);
+        }
+
+        $user = $request->user();
+        if($user){
+            try{
+                $sheetEmpty = 0;
+                $excelRecordId = 0;
+                ini_set('memory_limit','-1');
+                ini_set('max_execution_time',0);
+                set_time_limit(0);
+                $employerId = $request->employer_id;
+                $defaultPasswordFormatId = $request->default_password_format_id;
+                $diskSave = env('MEDIA_DISK', 'public');
+                $file = $request->file('default_password_sheet');
+                $fileName = time().$file->getClientOriginalName();
+                $fileUrl = $file->storeAs('User/DefaultPassword/Upload', $fileName, $diskSave);
+
+                try{
+                    $errorReport = new ExcelErrorReports();
+                    $errorReport->employer_id = $employerId;
+                    $errorReport->document_type_id = ExcelErrorReports::USER_DEFAULT_PASSWORD;
+                    $errorReport->original_document_url = Storage::disk($diskSave)->url($fileUrl) ? Storage::disk($diskSave)->url($fileUrl) : NULL;
+                    $errorReport->status = ExcelErrorReports::PROCESSING;
+                    $errorReport->created_by = $user->id;
+                    $errorReport->save();
+                    $errorReportId = $errorReport->id;
+
+                    try{
+                        $excelData = Excel::toArray(new DefaultPasswordImport($user, $employerId, $defaultPasswordFormatId, $errorReportId), $fileUrl, $diskSave);
+                    } catch(Exception $e) {
+                        return response()->json([
+                            'status' => false,
+                            'message'=> "excel sheet does not import proper !!",
+                            Log::error("excel sheet does not import proper !!")
+                        ]);
+                    }
+
+                    try{
+                        if(!isset($excelData[0][0])) {
+                            $sheetEmpty = 1;
+                            $deleteExcel = ExcelErrorReports::find($errorReportId);
+                            if(!empty($deleteExcel)){
+                                $deleteExcel->delete();
+                            }
+                        } else {
+                            if($sheetEmpty == 1){
+                                return response()->json([
+                                    'status' => false,
+                                    'message'=> 'Sheet may be empty so please fill the all fields and upload again !!',
+                                    Log::error('Sheet may be empty so please fill the all fields and upload again !!')
+                                ]);
+                            } else {
+                                $numberRecord = 100;
+                                $totalExcelData = $excelData[0];
+                                $excelChunkData = array_chunk($totalExcelData, $numberRecord);
+                                foreach($excelChunkData as $chunkValue){
+                                    try{
+                                        // $excelDataToArray = TestPasswordJob::dispatch($chunkValue, $employerId, $defaultPasswordFormatId, $errorReportId)->onQueue('default');
+                                        DefaultPasswordJob::dispatch($chunkValue, $employerId, $defaultPasswordFormatId, $errorReportId)->onQueue('default');
+                                        return response()->json([
+                                            'status' => true,
+                                            'message'=> 'File uploaded successfully !!'
+                                        ]);
+                                    } catch(Exception $e) {
+                                        return response()->json([
+                                            'status' => false,
+                                            'message'=> 'Sheet may be empty so please fill the all fields and upload again !!',
+                                            Log::error('excel data loop not working')
+                                        ]);
+                                    }
+                                }
+                            }
+                        }
+                    } catch(Exception $e){
+                        return response()->json([
+                            'status' => false,
+                            Log::error('excel data not found')
+                        ]);
+                    }
+                }catch(Throwable $e){
+                    return response()->json([
+                        'status' => false,
+                        'message'=> 'data validation is not working as expected !!'
+                    ]);
+                }
+            }catch(Throwable $e){
+                return response()->json([
+                    'status' => false,
+                    'message'=> 'sheet validation is not working as expected !!'
+                ]);
+            }
+        } else {
+            return response()->json([
+                'status'=> false,
+                'message'=> "User Not Found !!",
+                Log::error('User is not found !!')
+            ]);
+        }
+    }
+
+    protected function singlePassword(Request $request) {
+        try{
+            $user = User::where('email', $request->email)->first();
+            $default = MasterDefaultPassword::where("status",1)->get();
+            return $default;
+            // for single request than run this
+            if($user->master_user_types_id == 5){
+                $employee_details       = MasterEmployees::with('user')->where('user_id', $user->id)->first();
+                $userName               = secure($user->name, 'D');
+                $userName               = str_replace(' ', '', $userName);
+                $user_email             = $user->email;
+                $domain_name            = env('APP_NAME','Employee-Benefits');
+                $employee_doj           = $employee_details->doj;
+                $employee_dob           = $employee_details->dob;
+                $employee_code          = $employee_details->code;
+                if($default[0]->name == $request->name) {
+                    $defaultPassword = $userName.'@'.$employee_code;
+                    $password = Hash::make($defaultPassword);
+                    Log::info("password1",[$password]);
+                } elseif($default[1]->name == $request->name) {
+                    $defaultPassword = $employee_code.'@'.$employee_doj;
+                    $password = Hash::make($defaultPassword);
+                    Log::info("password2",[$password]);
+                } elseif($default[2]->name == $request->name) {
+                    $defaultPassword = $employee_code.'@'.$employee_dob;
+                    $password = Hash::make($defaultPassword);
+                    Log::info("password3",[$password]);
+                } elseif($default[3]->name == $request->name) {
+                    $defaultPassword = $userName.'@'.$employee_code;
+                    $password = Hash::make($defaultPassword);
+                    Log::info("password4",[$password]);
+                } elseif($default[4]->name == $request->name) {
+                    $defaultPassword = $employee_code.'@'.$userName;
+                    $password = Hash::make($defaultPassword);
+                    Log::info("password5",[$password]);
+                } elseif($default[5]->name == $request->name) {
+                    $defaultPassword = $userName.'@'.$employee_dob;
+                    $password = Hash::make($defaultPassword);
+                    Log::info("password6",[$password]);
+                } elseif($default[6]->name == $request->name) {
+                    $defaultPassword = $userName.'@'.$employee_doj;
+                    $password = Hash::make($defaultPassword);
+                    Log::info("password7",[$password]);
+                } elseif($default[7]->name == $request->name){
+                    $defaultPassword = $employee_doj.'@'.$employee_code;
+                    $password = Hash::make($defaultPassword);
+                    Log::info("password8",[$password]);
+                } elseif($default[8]->name == $request->name){
+                    $defaultPassword = $employee_code.'@'.$domain_name;
+                    $password = Hash::make($defaultPassword);
+                    Log::info("password9",[$password]);
+                } else{
+                    return response()->json([
+                        'status'=> false,
+                        'message'=> 'Default Password demy is not found !!'
+                    ]);
+                }
+                $user->default_password = $defaultPassword;
+                $user->password = $password;
+                $user->update();
+            }else{
+                return response()->json([
+                    'status'=> false,
+                    'message'=> 'Master User Type id is not found !!'
+                ]);
+            }
+            return response()->json([
+                "status"=> true,
+                "data"=> $user,
+            ],200);
+        }catch(\Exception $e){
+            return response()->json([
+                "status"=> false,
+                "error"=> $e->getMessage(),
+            ],422);
+        }
+    }
+}

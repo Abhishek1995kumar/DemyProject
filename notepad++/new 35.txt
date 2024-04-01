@@ -1,0 +1,214 @@
+<?php
+
+namespace App\Jobs;
+
+use App\User;
+use Throwable;
+use Exception;
+use Illuminate\Bus\Queueable;
+use App\Models\MasterEmployee;
+use App\Models\MasterEmployees;
+use App\Models\MasterEmployers;
+use App\Models\ExcelErrorReports;
+use Illuminate\Support\Facades\DB;
+use App\Models\DumpDefaultPassword;
+use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Storage;
+use App\Exports\DefaultExcelErrorExport;
+use Illuminate\Queue\InteractsWithQueue;
+use App\Exports\UserLoginModeErrorExport;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
+use App\Models\EmployerDefaultPasswordConfigurator;
+use Illuminate\Bus\Batchable;
+use Illuminate\Queue\Events\JobFailed;
+
+class TestPasswordJob implements ShouldQueue {
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, Batchable;
+
+    public $chunkValue, $employerId, $defaultPasswordFormatId, $errorReportId;
+    public function __construct($chunk_value, $employer_id, $default_password_formatId, $errorReportId) {
+        $this->chunkValue               = $chunk_value;
+        $this->employerId               = $employer_id;
+        $this->defaultPasswordFormatId  = $default_password_formatId;
+        $this->errorReportId            = $errorReportId;
+        ini_set('memory_limit','-1');
+        ini_set('max_execution_time',0);
+        set_time_limit(0);
+    }
+
+
+    public function handle() {     
+        try{
+            ini_set('memory_limit','-1');
+            ini_set('max_execution_time',0);
+            set_time_limit(0);
+            $chankValue     = $this->chunkValue;
+            $countChunkData = count($chankValue);
+            $empliyerId     = $this->employerId;
+            $defaultPFId    = $this->defaultPasswordFormatId;
+            $errorRId       = $this->errorReportId;
+            $totalDumpDefaultPassword = DumpDefaultPassword::where('excel_report_id', $errorRId)
+                                        ->where('is_validated', 0)
+                                        ->where('is_processed', 0)
+                                        ->limit(500)->get();
+
+            $totalProccesedData = $totalDumpDefaultPassword->where('is_processed',0);
+            $totalValidateDataZero = $totalDumpDefaultPassword->where('is_validated',0);
+            if(!empty($totalValidateDataZero)){
+                foreach($totalValidateDataZero->chunk(100) as $key => $value){
+                    foreach($value as $key=>$item){
+                        try{
+                            DB::transaction(function() use(&$totalProccesedData, &$item){
+                                $this->validation($item);
+                            });
+                        }catch(Exception $e){
+                            Log::info("Log from validation foreach.");
+                            Log::error($e->getMessage());
+                        }
+                    }
+                }
+            }
+
+            $totalValidateDataOne = $totalDumpDefaultPassword->where('is_validated',1)->where('has_errors', 0);
+            if(!empty($totalValidateDataOne)){
+                try{
+                    foreach($totalValidateDataOne->chunk(100) as $key => $validateData){
+                        foreach($validateData as $key2 => $item){
+                            try{
+                                $employeeDetails = MasterEmployees::where('employer_id', $this->employerId)
+                                ->where('code', $item->employee_code)
+                                ->first();
+                                if(!empty($employeeDetails)){
+                                    $userDetails = User::where('id', $employeeDetails->user_id)->first();
+                                    if($userDetails){
+                                        $defaultPassword = NULL;
+                                        if($item->default_password_format_id == 4){
+                                            $defaultPassword = $item->password_name;
+
+                                        } elseif($item->default_password_format_id == 2) {
+                                            $defaultPassword = $item->password_name;
+
+                                        } elseif($item->default_password_format_id == 1) {
+                                            $defaultPassword = $item->password_name;
+
+                                        } elseif($item->default_password_format_id == 3) {
+                                            $defaultPassword = $item->password_name;
+
+                                        } elseif($item->default_password_format_id == 8){
+                                            $defaultPassword = $item->password_name;
+
+                                        } elseif($item->default_password_format_id == 5){
+                                            $defaultPassword = $item->password_name;
+
+                                        } elseif($item->default_password_format_id == 6){
+                                            $defaultPassword = $item->password_name;
+
+                                        } elseif($item->default_password_format_id == 7){
+                                            $defaultPassword = $item->password_name;
+
+                                        } elseif($item->default_password_format_id == 9){
+                                            $defaultPassword = $item->password_name;
+
+                                        }
+                                        $userDetails->default_password = $defaultPassword;
+                                        $userDetails->password = Hash::make($defaultPassword);
+                                        $userDetails->update();
+                                    }
+                                }
+                                $item->is_processed = 1;
+                                $item->update();
+                                Log::info('user default password updated successfully');
+                            }catch(Exception $e){
+                                $item->has_errors = 1;
+                                $item->errors = json_encode(['failed_to_process' => 'Validation Failed : ' . $e->getMessage()]);
+                                $item->update();
+                            }
+                        }
+                    }
+                }catch(Throwable $e){
+                    Log::info("is_validation is not equel to one, validation is failed ");
+                    Log::error($e->getMessage());
+                }
+            }else{
+                Log::info("No data to process.");
+            }
+
+            $countSheetData = 0;
+            $dumpDataCount = DumpDefaultPassword::where('excel_report_id', $this->errorReportId)
+                                ->where('is_validated', 0)
+                                ->where('is_processed', 0)
+                                ->count();
+
+            if(!empty($dumpDataCount)){
+                $countSheetData = 1;
+                if($countSheetData == 1){
+                        DefaultPasswordJob::dispatch($this->employerId, $this->errorReportId)->delay(2)->onQueue('endrosement');
+                } else {
+                    $this->generateErrorExcel();
+                }
+            }
+        }catch(Throwable $e){
+            Log::error($e);
+        }
+    }
+
+
+    public function validation($data) {
+        try{
+            $rules = [
+                'employee_code_is_mandatory'                                => 'Employee Code is Mandatory please fill the employee code first',
+                'db_employee_code_and_request_employee_code_dose_not_match' => 'Database Employee code and Request Employee Code does not match',
+                'employee_code_is_not_exists_in_database'                   => 'Employee code is not exist in database',
+                'employee_code_is_invalid_format'                           => 'Employee code format is Invalid please check manually',
+                'dob_format_is_invalid'                                     => 'Date of Birth format is Invalid please check manually',
+                'doj_format_is_invalid'                                     => 'Date of Joinning format is Invalid please check manually',
+                'default_password_is_mandatory'                             => 'default password is mandatory please fill thedefault password first',
+                'default_password_format_is_invalid'                        => 'Date of Birth format is Invalid please check manually',
+            ];
+            $hasErrors = 0;
+            $errors = []; // getting an aaray means many type of error store in error column
+            $data->employee_code = trim($data->employee_code);
+
+            // employee code validation 
+            if(is_null($data->employee_code)){
+                $hasErrors = 1;
+                $errors[] = $rules['employee_code_is_mandatory'];
+            }else{
+                $employeeData = MasterEmployees::where('code', $data->employee_code)->where('employer_id', $this->employerId)->first();
+                if(!$employeeData){
+                    $hasErrors = 1;
+                    $errors[] = $rules['employee_code_is_not_exists_in_database'];
+
+                }
+            }
+
+            //  default password validation
+            if(is_null($data->default_password)){
+                $errors[] = $rules['default_password_is_mandatory'];
+            }else{
+                if($data->default_password== 1 || $data->default_password== 2 || $data->default_password== 3 || $data->default_password== 4 || $data->default_password== 5 || $data->default_password== 6 || $data->default_password== 7 || $data->default_password== 8 || $data->default_password == 9){
+                    
+                }else{
+                    $hasErrors = 1;
+                    $errors[] = $rules['default_password_format_is_invalid'];
+                }
+            }
+            
+            $data->is_validated = 1;
+            // $data->is_processed = 1;
+            $data->update();
+            if($hasErrors == 1){
+                $data->has_errors = $hasErrors;
+                $data->errors = $errors;
+                $data->update();
+            }
+        }catch(Exception $e){
+            $data->errors = json_encode(['failed_to_process' => 'Validation Failed : ' . $e->getMessage()]);
+            $data->update();
+        }
+    }

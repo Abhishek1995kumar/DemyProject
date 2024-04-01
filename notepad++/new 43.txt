@@ -1,0 +1,170 @@
+
+This is my postman row data
+{
+    "template_id": 4,
+    "payload": {
+        "vendor_name": null,
+        "vendor_shop_name": null,
+        "vendor_contact": null,
+        "vendor_email": null,
+        "vendor_address": null,
+        "vendor_landmark": null,
+        "vendor_address_proof": null,
+        "vendor_fax": null
+    }
+}
+
+
+$rules = [
+	'data' => 'array',
+	'field_name' => 'exists:template_field_details,id',
+	'template_id' => 'required|exists:template_names,id',
+];
+
+$message = [
+	'data.array' => 'Data field is like array, please use the valid data type',
+	'field_name.*' => 'Field name must be exist in template field table, please check field name manually',
+	'template_id' => 'Template id field is required, please select a template id'
+];
+
+$validator = Validator::make($request->all(), $rules, $message);
+
+if($validator->fails()) {
+	return response()->json([
+		'errors' => $validator->errors()
+	]);
+
+} else {
+	$templateNameRecord = TemplateName::when($request->has('template_id'), function($query) use ($request) {
+		$query->whereHas('templateField', function($q) use ($request) {
+			$q->where('template_name_id', $request->template_id);
+		});
+	})->with('templateField')->get();
+
+	if(!empty($templateNameRecord)) {
+		try{
+			foreach ($templateNameRecord as $template) {
+				$templateFieldData = [];
+				foreach ($template->templateField as $field) {
+					if(is_null($request->input($field->field_name))) {
+						return response()->json([
+							'status' => false,
+							'message' => 'Please fill all template fields.',
+						]);
+
+					} elseif(!array_key_exists($field->field_name, $request->input($field->field_name))) {
+						return response()->json([
+							'status' => false,
+							'message' => 'Please fill corrected template field name.',
+						]);
+					}
+
+					$templateFieldData[$field->field_name] = $request->input($field->field_name);
+				}
+
+				$payloadDetails = new TemplatePayloadData();
+				$payloadDetails->template_name_id = $template->id;
+				$payloadDetails->data = $templateFieldData;
+				// $payloadDetails->save();
+			}
+
+			return response()->json([
+				'status' => true,
+				'data' => "Payload details successfully created",
+			]);
+
+		} catch (Exception $e) { 
+			return response()->json([
+				'status' => false,
+				'errors' => $e->getMessage()
+			]);
+		}
+	} else {
+		return response()->json([
+		'status' => false,
+		'message' => 'Template id is not found, please you can check template id is manually.',
+		]);
+	}
+}
+
+if user not use proper field name which field is available on payload than getting error for please fill valid fields using laravel api
+
+
+
+
+
+     
+
+
+
+
+
+
+
+
+
+
+                    // if($request->has('payload')) {
+                    //     $errorField = [];
+                    //     foreach($request->payload as $key => $value) {
+                    //         return $request->payload;
+                    //         if(is_null($key) || !array_key_exists($value, $request->payload)) {
+                    //             $errorField[] = $key;
+                    //         }
+                    //     }
+                    //     if(!empty($errorField)) {
+                    //         return response()->json([
+                    //             'status' => false,
+                    //             'errors' => $errorField
+                    //         ]);
+                    //     }
+
+                    //     foreach($request->payload as $key => $value) {
+                            
+                    //     }
+                    // } else {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$eventIdsArray = PushNotificationEvent::where('policy_mapping_allowed', 0)->pluck('id')->toArray();
+$eventIds = implode(",", $eventIdsArray);
+
+$rules = [
+	'employer_id' => 'required_without:broker_id|integer|exists:master_employers,id',
+	'broker_id' => 'required_without:employer_id|integer|exists:master_brokers,id',
+	'trigger_id' => 'sometimes|required|exists:push_notification_events,id',
+	'template_id' => 'required|exists:push_notification_templates,id',
+	'policy_id' => 'required_unless:trigger_id,' . $eventIds . '|integer|exists:master_policies,id',
+	'file' => 'sometimes|required|file|mimes:xlx,xlsx,xls',
+	'trigger_all' => 'sometimes|required|boolean',
+	'platform_id' => 'sometimes|required|integer',    //1 => Web, 2 => Android/IOS
+];
+
+
+'log_type' => ['required', Rule::in('triggerOffEmail', 'triggerOnEmail', 'emailNotSent', 'getAllData')],
+
+
+
+
+
+

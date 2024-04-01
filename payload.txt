@@ -95,3 +95,51 @@
     ]
 }
 
+
+{
+    "template_name" : "account details",
+    "data" : [
+        {
+            "validation_id" : 1,
+            "data_type_id" : 1,
+            "is_mandatory" : 1,
+            "field_name" : "account_first_name"
+        },
+        {
+            "validation_id" : 1,
+            "data_type_id" : 1,
+            "is_mandatory" : 1,
+            "field_name" : "account_last_name"
+        },
+        {
+            "validation_id" : 1,
+            "data_type_id" : 1,
+            "is_mandatory" : 1,
+            "field_name" : "account_contact"
+        },
+        {
+            "validation_id" : 1,
+            "data_type_id" : 8,
+            "is_mandatory" : 1,
+            "field_name" : "account_email"
+        },
+        {
+            "validation_id" : 1,
+            "data_type_id" : 8,
+            "is_mandatory" : 1,
+            "field_name" : "account_address"
+        },
+        {
+            "validation_id" : 6,
+            "data_type_id" : 2,
+            "is_mandatory" : 1,
+            "field_name" : "account_number"
+        }
+    ]
+}
+
+
+
+
+
+

@@ -1,0 +1,42 @@
+                                    
+                                    if ($mEmployer?->default_password_enabled) {
+                                        $eCode = $chunkedMembersData->employee_code;
+                                        $eDob = $chunkedMembersData->employee_dob;
+                                        $eDoj = $chunkedMembersData->employee_date_of_joining;
+                                        $name = $chunkedMembersData->employee_first_name . $chunkedMembersData->employee_last_name;
+                                        $password = generateEmployerBasedDefaultPassword($mEmployer, $eCode, $eDob, $eDoj);
+
+                                        if($chunkedMembersData['employee_code'] == $codeDefault){
+                                            $defaultPassword = $chunkedMembersData['default_password'];
+                                            $dataToCreateUser['default_password'] = $defaultPassword;
+                                            $dataToCreateUser['password'] = Hash::make($dataToCreateUser['default_password']);
+                                            $dataToCreateUser['master_password'] = 0;
+                                        }else{
+                                            $dataToCreateUser['default_password'] = $password;
+                                            $dataToCreateUser['password'] = Hash::make($password);
+                                            $dataToCreateUser['master_password'] = 0;
+                                        }
+                                    } else {
+                                        $eDob = $chunkedMembersData->employee_dob;
+                                        $eCode = $chunkedMembersData->employee_code;
+                                        $eDoj = $chunkedMembersData->employee_date_of_joining;
+                                        $name = $chunkedMembersData->employee_first_name . $chunkedMembersData->employee_last_name;
+                                        $password = generateEmployerBasedDefaultPassword($mEmployer, $eCode, $eDob, $eDoj);
+
+                                        if (isset($chunkedMembersData->default_password)) {
+                                            if($chunkedMembersData['employee_code'] == $codeDefault){
+                                                $defaultPassword = $chunkedMembersData['default_password'];
+                                                $dataToCreateUser['default_password'] = $defaultPassword;
+                                                $dataToCreateUser['password'] = Hash::make($dataToCreateUser['default_password']);
+                                                $dataToCreateUser['master_password'] = 0;
+                                            }else{
+                                                $dataToCreateUser['default_password'] = $password;
+                                                $dataToCreateUser['password'] = Hash::make($password);
+                                                $dataToCreateUser['master_password'] = 0;
+                                            }
+                                        } else {
+                                            $dataToCreateUser['default_password'] = $password;
+                                            $dataToCreateUser['password'] = Hash::make($password);
+                                            $dataToCreateUser['master_password'] = 0;
+                                        }
+                                    }
