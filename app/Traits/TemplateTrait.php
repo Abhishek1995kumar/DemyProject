@@ -3,12 +3,17 @@
 namespace App\Traits;
 
 
-use App\Models\TemplateFields;
+
 use Exception;
-use App\Models\Admin;
-use Illuminate\Http\Request;
+use App\Models\DataType;
+use App\Models\Validation;
 use App\Models\TemplateName;
+use Illuminate\Http\Request;
+use App\Models\TemplateFields;
+use App\Models\TemplatePayloadData;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+
 
 trait TemplateTrait {
     public function index() {
@@ -112,8 +117,44 @@ trait TemplateTrait {
     }   
 
 
-    public function update(Request $request, Admin $admin) {
+    public function updateTemplateNameAndField(Request $request) {
+        try{
+            $rules = [
+                'template_id' => 'integer|exists:template_names,id',
+                'data.*.validation_id' =>'integer|exists:validations,id', // when i want to send multiple data in databse on that time we need to check validation, this reason we use this method
+                'data.*.data_type_id'  =>'integer|exists:data_types,id', // we getting data from postman 
+                'data.*.field_name'    =>'',   // * -- mean indexing, Indexing the records in the data where I am setting
+                'data.*.is_mandatory'  =>'integer',
+            ];
 
+            $mesages = [
+                'template_id' => 'Template id is not found, please provide valid template id',
+                'template_id.integer' => 'Template id must be integer type, please check template id is manually',
+                'template_id.exists' => 'Template id field does not exist in database, please check template id is manually',
+                'validation_id.requierd' => 'Validation id field is mandatory, please provide a validation id',
+                'validation_id.integer' => 'Validation id field must be integer type, please check template id is manually',
+                'validation_id.exists' => 'Validation id field does not exist in database, please check template id is manually',
+                'data_type_id.requierd' => 'Data type id field is mandatory, please provide a data type id',
+                'data_type_id.integer' => 'Validation id field must be integer type, please check data type id is manually',
+                'data_type_id.exists' => 'Validation id field does not exist in database, please check data type id is manually',
+            ];
+
+            $validator = Validator::make($request->all(), $rules, $mesages);
+            if($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors()
+                ]);
+            }
+
+            $templateFieldData = TemplateFields::where('template_name_id', $request->payload);
+
+        } catch(Exception $e) {
+            return response()->json([
+                'status' => false,
+                'errors' => $e->getMessage()
+            ]);
+        }
     }
 
 }

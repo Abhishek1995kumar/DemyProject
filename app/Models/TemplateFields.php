@@ -14,7 +14,7 @@ class TemplateFields extends Model {
     protected $guarded = [];
 
     public function templateName() {
-       return $this->hasOne(TemplateName::class, 'template_name_id', 'id');
+       return $this->hasOne(TemplateName::class, 'id', 'template_name_id');
     }
 
     

@@ -12,6 +12,7 @@ use App\Http\Controllers\CategoryController;
 // use App\Http\Controllers\UserDetailsController;
 use App\Http\Controllers\TemplateDetailsController;
 use App\Http\Controllers\StudentController;
+use App\Http\Controllers\StateController;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -65,6 +66,12 @@ Route::post('template/payload/save', [TemplateDetailsController::class, 'getTemp
 
 Route::post('template/name-field/update', [TemplateDetailsController::class, 'updateTemplateNameField']);
 
+Route::post('template/name-field/show', [TemplateDetailsController::class, 'showTemplateDetails']);
 
+
+
+// Traits
 Route::post('template/name-field/store', [StudentController::class, 'store']);
+
+Route::post('template/name-field/update', [StudentController::class, 'update']);
 

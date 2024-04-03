@@ -9,9 +9,45 @@ use App\Models\TemplateName;
 use Illuminate\Http\Request;
 use App\Models\TemplateFields;
 use App\Models\TemplatePayloadData;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class TemplateDetailsController extends Controller {
+    public function showTemplateDetails(Request $request) {
+        try{
+            // return $templateName = TemplateFields::when($request->has('template_id'), function($query) use ($request) {
+            //     $query->whereHas('templateName', function($q) use ($request) {
+            //         $q->where('id', $request->template_id);
+            //     });
+            // })->with('templateName')->get();
+
+            $templateName = TemplateName::when($request->has('template_name_id'), function($query) use ($request) {
+                $query->whereHas('templateField', function($q) use ($request) {
+                    $q->where('template_name_id', $request->template_name_id);
+                });
+            })->with('templateField')->get();
+
+            if($templateName->isNotEmpty()) {
+                return response()->json([
+                    'status' => 'success',
+                    'data' => $templateName
+                ]);
+
+            } else {
+                return response()->json([
+                   'status' => 'error',
+                   'message' => 'Template not found'
+                ]);
+            }
+
+        } catch(Exception $e) {
+            return response()->json([
+                'status' => false,
+                'errors' => $e->getMessage()
+            ]);
+        }
+    }
+
     public function saveTemplateNameFields(Request $request) {
         try {
             $rules = [
@@ -48,8 +84,8 @@ class TemplateDetailsController extends Controller {
                 $templateDetails->save();
 
                 if(!empty($templateDetails->id)){
-                    if($request->has('data')) {
-                        foreach($request->data as $key => $value) {
+                    if($request->has('payload')) {
+                        foreach($request->payload as $key => $value) {
                             $details = [
                                 'template_name_id' => $templateDetails->id,
                                 'validation_id' => $value['validation_id'],
@@ -60,16 +96,32 @@ class TemplateDetailsController extends Controller {
                                 'created_at' => now() ?? NULL,
                                 'updated_at' => now() ?? NULL
                             ];
-                            
+
                             TemplateFields::insert($details);
 
                         };
 
                     } else {
-                        return response()->json([
-                           'status' => false,
-                           'message' => 'Template id is not found, please you can check template id is manually.',
-                        ]);
+                        $templateDetails = new TemplateName();
+                        $templateDetails->templete_name = $request->template_name;
+                        $templateDetails->status = $request->status ?? 1;
+                        $templateDetails->created_at = now() ?? NULL;
+                        $templateDetails->updated_at = now() ?? NULL;
+                        $templateDetails->save();
+
+                        if($templateDetails->id) {
+                            $templateFields = new TemplateFields();
+                            $templateFields->template_name_id = $templateDetails->id;
+                            $templateFields->validation_id = $request->validation_id;
+                            $templateFields->data_type_id = $request->data_type_id;
+                            $templateFields->field_name = $request->field_name;
+                            $templateFields->status = $request->is_mandatory;
+                            $templateFields->status = $request->status ?? 1;
+                            $templateFields->created_at = now() ?? NULL;
+                            $templateFields->updated_at = now() ?? NULL;
+                            $templateFields->save();
+
+                        }
                     }
 
                     return response()->json([
@@ -78,7 +130,10 @@ class TemplateDetailsController extends Controller {
                     ]);
 
                 } else {
-
+                    return response()->json([
+                        'status' => true,
+                        'data' => "Template is not created properly, please you can check and create again",
+                    ]);
                 }
 
             }
@@ -111,18 +166,11 @@ class TemplateDetailsController extends Controller {
                 ]);
             } else {
 
-                // $templateDetails = TemplateName::when($request->has('template_id'), function($query) use ($request) {
-                //     $query->whereHas('templateField', function($q) use ($request) {
-                //         $q->where('template_name_id', $request->template_id);
-                //     });
-                // })->with('templateField')->first();
-
                 $templateDetails = TemplateName::where('id', $request->id)->with('templateField')->first();
 
                 if ($templateDetails) {
                     if ($request->has('payload')) {
                         $templateFieldNames = $templateDetails->templateField->pluck('field_name')->toArray();
-
                         $payloadFields = collect($request->payload);
                         $deletePluckedDetails = $payloadFields->pluck('field_name')->toArray();
 
@@ -137,24 +185,6 @@ class TemplateDetailsController extends Controller {
                                         ->whereIn('field_name', $deffierenceFieldDatabase)->delete(); // whereIn -- jab data as a array/collection me ho tab ham whereIn ka use karte hai
 
                         }
-
-                        // $deleteTemplateFields = TemplateFields::where('template_name_id', $request->id)->select('validation_id','data_type_id', 'is_mandatory', 'field_name')->get();
-
-                        // $deletedValue = [];
-                        // foreach ($deleteTemplateFields as $deleteField) {
-                        //     $deletedValue[] = $deleteField->field_name;
-                        // }
-
-                        // $payloadFieldCollection = [];
-                        // foreach($payloadFields as $pay) {
-                        //     $payloadFieldCollection[] = $pay['field_name'];
-                        // }
-
-                        // if($deletedValue != $payloadFields) {
-                        //     $defferenceField = array_diff($payloadFieldCollection, $deletedValue);
-                        //     $del = TemplateFields::where('field_name', $defferenceField);
-                        //     return $del;
-                        // }
 
                         foreach($newFields as $value) {
                             $templateField = new TemplateFields();
@@ -176,13 +206,8 @@ class TemplateDetailsController extends Controller {
                             'status' => true,
                             'message' => 'Template field is updated successfully', 
                         ]);
-                    } else {
-
-                        // return response()->json([
-                        //    'status' => false,
-                        //    'message' => 'Payload field is required',
-                        // ]);
                     }
+
                 } else {
                     return response()->json([
                        'status' => false,
@@ -199,150 +224,11 @@ class TemplateDetailsController extends Controller {
     }
 
 
-    public function oldGetTemplatePayloadDetails(Request $request) {
-        try{
-            $rules = [
-                'data' => 'array',
-                'template_id' => 'required|exists:template_names,id',
-            ];
-
-            $message = [
-                'data.array' => 'Data field is like array, please use the valid data type',
-                'template_id' => 'Template id field is required, please select a template id'
-            ];
-
-            $validator = Validator::make($request->all(), $rules, $message);
-
-            if($validator->fails()) {
-                return response()->json([
-                    'errors' => $validator->errors()
-                ]);
-
-            } else {
-                $templateNameRecord = TemplateName::when($request->has('template_id'), function($query) use ($request) {
-                    $query->whereHas('templateField', function($q) use ($request) {
-                        $q->where('template_name_id', $request->template_id);
-                    });
-                })->with('templateField')->get();
-                
-                if($templateNameRecord) {
-                    if($request->has('payload')) {
-                        $templatePayloadFieldData = [];
-                        foreach($request->payload as $key => $value) {
-                            $templatePayloadFieldData[$key] = $value;
-                            
-                        }
-                        
-                        $errorFields = [];
-                        $validationDetails  = [];
-                        $dataTypeDetails  = [];
-                        $fieldValues  = [];
-                        foreach($templateNameRecord as $key => $value) {
-                            $fieldKeys = array_keys($request->payload);
-                            $fieldValues = array_values($request->payload);
-                            $fieldName = $value->templateField->pluck('field_name')->toArray();
-                            $validationId = $value->templateField->pluck('validation_id')->toArray(); 
-                            $dataTypeId = $value->templateField->pluck('data_type_id')->toArray();
-
-                            $templatePayloadFieldDataId = $value->id;
-                            
-                            $errorFields = array_diff($fieldKeys, $fieldName);
-                            $dataTypeDetails = $dataTypeId;
-                            $validationDetails = $validationId;
-                            
-                        }
-
-                        $validationFromDatabase = Validation::whereIn('id', $validationDetails)->pluck('id')->toArray();
-                        $datatypeFromDatabase = DataType::whereIn('id', $dataTypeDetails)->get(['id', 'data_type_value'])->toArray();
-
-                        if(empty($errorFields)) {
-                            $payloadDetails = new TemplatePayloadData();
-                            $payloadDetails->template_name_id = $templatePayloadFieldDataId;
-                            $payloadDetails->data = $templatePayloadFieldData;
-
-                            $datatypeFromDatabaseId = [];
-                            $datatypeFromDatabaseValue = [];
-                            foreach($datatypeFromDatabase as $datatype) {
-                                $datatypeFromDatabaseValue = $datatype['data_type_value'];
-                                $datatypeFromDatabaseId = $datatype['id'];
-                            }
-                            
-                            if($datatypeFromDatabaseValue && $datatypeFromDatabaseValue !== $request->payload) {
-                                return response()->json([
-                                    'status' => false,
-                                    'errors' => $fieldKeys . ''
-                                ]);
-                            } else {
-                                // $payloadDetails->save();
-                            }
-                            
-                            return response()->json([
-                               'status' => true,
-                               'message' => 'Template payload is saved successfully',
-                            ]);
-
-                        } else {
-                            return response()->json([
-                                'status' => false,
-                                'message' => 'template field is not matching into database',
-                                'errors' => $errorFields
-                            ]);
-                        }
-
-                    } else {
-                        foreach ($templateNameRecord as $template) {
-                            $errorFields = [];
-                            $templateFieldData = [];
-                            $fieldName = $template->templateField->pluck('field_name')->toArray();
-
-                            foreach ($template->templateField as $key => $field) {
-                                $templateFieldData[$field->field_name] = $request->input($field->field_name);                              
-                            }
-                            
-                            $errorFields = array_diff($fieldName, array_keys($templateFieldData));
-
-                            if(empty($errorFields)) {
-                                $payloadDetails = new TemplatePayloadData();
-                                $payloadDetails->template_name_id = $template->id;
-                                $payloadDetails->data = $templateFieldData;
-                                $payloadDetails->save();
-                                return response()->json([
-                                   'status' => true,
-                                   'message' => 'Template data is saved successfully',
-                                ]);
-                            } else {
-                                return response()->json([
-                                    'status' => false,
-                                    'message' => 'Please fill all the required fields',
-                                    'errors' => $errorFields
-                                ]);
-                            }
-                        }
-                    }
-
-                } else {
-                    return response()->json([
-                    'status' => false,
-                    'message' => 'Template id is not found, please you can check template id is manually.',
-                    ]);
-                }
-            }
-
-        } catch(Exception $e) {
-            return response()->json([
-                'status' => false,
-                'errors' => $e->getMessage()
-            ]);
-        }
-    }
-
-
-
     public function getTemplatePayloadDetails(Request $request) {
         try {
             $rules = [
                 'data' => 'array',
-                'template_id' => 'required|exists:template_names,id',
+                'template_id' => 'integer|exists:template_names,id',
             ];
 
             $message = [
@@ -358,81 +244,119 @@ class TemplateDetailsController extends Controller {
                     'errors' => $validator->errors()
                 ]);
             }
-            
+
             $templateDetails = TemplateFields::where('template_name_id', $request->template_id)->get();
             
-            if($templateDetails) { 
-                if(empty($request->has('payload'))) {
-                    return response()->json([
-                        'status' => true,
-                        'error' => "Payload template data id empty, please fill all template fields and after try again",
-                    ]);
-                }
+            if(empty($templateDetails)) { 
+                return response()->json([
+                    'status' => false,
+                    'error' => "No template fields found for the given template id",
+                ]);
+            }
 
-                $errorFields = [];
-                $errorDataType = [];
-                $errorValidation = [];
-                $templateId = [];
-                $validationFromTemplateFieldId = [];
-                $datatypeFromTemplateFieldId = [];
+            if($request->has('payload')) {
+                $errors= [];
                 foreach($templateDetails as $payload) {
-                    $templateId = $payload['template_id'];
-                    $validationFromTemplateFieldId[] = $payload->validation_id;
-                    $datatypeFromTemplateFieldId[] = $payload->data_type_id;
-                    $validationTableId = Validation::whereIn('id', $datatypeFromTemplateFieldId)->first();
-                    $dataTypeTableId = DataType::whereIn('id', $datatypeFromTemplateFieldId)->first();
+                    $dataType = DataType::find($payload->data_type_id);
+                    $validation = Validation::find($payload->validation_id);
+                    $actualType = gettype($request->payload[$payload->field_name]);
+                    $requestValue = $request->payload[$payload->field_name];
+                    $actualType = gettype($requestValue);
 
                     if (!in_array($payload->field_name, array_keys($request->payload))) {
-                        $errorFields[] = [
+                        $errors[] = [
                             "field_name" => $payload->field_name,
-                            "error" => "field is mandatory"
-                        ];
-                    }
-                    return gettype($request->payload[$payload->field_name]);
-                    if($dataTypeTableId->data_type_value !== gettype($request->payload[$payload->field_name])) {
-                        $errorDataType[] = [
-                            "field_name" => $payload->field_name,
-                            "error" => "data type is not matching"
+                            'error' => "Field is mandatory but missing in $payload->field_name"
                         ];
                     }
 
-                    // if($validationTableId->validation_value !== $request->payload[$payload->field_name]) {
-                    //     $errorValidation[] = [
-                    //         "field_name" => $payload->field_name,
-                    //         "error" => "validation error"
-                    //     ];
-                    // }
+                    if ($dataType->data_type_value !== $actualType) {
+                        $errors[] = [
+                            'field_name' => $payload->field_name,
+                            'error' => "Data type is not matching. Database : $dataType->data_type_value, Request payload : $actualType"
+                            
+                        ];
+                        
+                    }
+
+                    if ($validation && !empty($validation->validation_value)) {
+                        if (!Validator::make([$payload->field_name => $request->payload[$payload->field_name]], [$payload->field_name => $validation->validation_value])->passes()) {
+                            $errors[] = [
+                                "field_name" => $payload->field_name,
+                                "error" => "Validation failed for $payload->field_name"
+                            ];
+                        }
+                    }
+
+                    if($payload->is_mandatory == 1 && empty($request->payload[$payload->field_name])) {
+                        $errors[] = [
+                            "field_name" => $payload->field_name,
+                            "error" => "$payload->field_name field is mandatory but missing in $payload->field_name"
+                        ]; 
+                    } 
                 }
 
-                if(empty($errorFields)) {
+                if(!empty($errors)) {
                     return response()->json([
                         'status' => false,
-                        'errors' => $errorFields
+                        'errors' => $errors
                     ]);  
                 }
 
-                if(!empty($errorDataType)) {
-                    return response()->json([
-                        'status' => false,
-                        'errors' => $errorDataType
-                    ]);    
+            } else {
+
+                $errors= [];
+                $fieldFromDatabase = $templateDetails->pluck('field_name')->toArray();
+                $requestField = array_keys($request->all());
+                $requestValue = array_values($request->all());
+                $requestField = array_diff(array_keys($request->except('template_id')), ['template_id']);
+                
+                foreach($requestField as $field) {
+                    if(!in_array($field, $fieldFromDatabase)) {
+                        $errors[] = [
+                            "field_name" =>  $field,
+                            'error' => "Field $field is missing in the request data"
+                        ];
+                    }
                 }
 
-                foreach($templateDetails as $key => $value) {
-                    $templateDetailsSave = new TemplatePayloadData();
-                    $templateDetailsSave = $templateDetails->template_name_id;
-                    return $templateDetailsSave;
+                
+                foreach($templateDetails as $details) {
+                    $validation = Validation::find($details->validation_id);
+                    $dataType = DataType::find($details->data_type_id);
+                    $expectedDataType = $dataType->data_type_value;
+                    $fieldName = $details->field_name;
                     
+                    if(array_key_exists($fieldName, $request->all()) && $expectedDataType !== gettype($request->$fieldName)) {
+                        $errors[] = [
+                            "field_name" =>  $fieldName,
+                            'error' => "Invalid data type for field $fieldName. Expected {$expectedDataType}."
+                        ];
+                    }
                 }
             }
+
+            if(!empty($errors)) {
+                return response()->json($errors);
+            }
+
+            $templatePayloadData = new TemplatePayloadData();
+            $templatePayloadData->template_name_id = $request->template_id;
+            $templatePayloadData->data = $request->payload;
+            // $templatePayloadData->save();
+
+            return response()->json([
+               'status' => true,
+               'message' => 'Template payload is saved successfully',
+            ]);
 
         } catch(Exception $e) { 
             return response()->json([
                 'status' => false,
-                'errors' => $e->getMessage()
+                'errors' => $e->getMessage(),
+                Log::info($e->getMessage(), [$e->getTraceAsString()])
             ]);
         }
-
     }
 
 }

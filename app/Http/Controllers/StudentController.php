@@ -15,8 +15,8 @@ class StudentController extends Controller {
         return  $this->storeTemplateNameAndField($request);
     }
 
-    // public function update(Request $request, Student $student) {
-        
-    // }
+    public function update(Request $request) {
+        return $this->updateTemplateNameAndField($request);
+    }
 
 }
