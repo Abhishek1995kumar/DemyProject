@@ -64,6 +64,8 @@ Route::post('template/name-field/save', [TemplateDetailsController::class, 'save
 
 Route::post('template/payload/save', [TemplateDetailsController::class, 'getTemplatePayloadDetails']);
 
+Route::post('template/payload/test', [TemplateDetailsController::class, 'templatePayloadDetails']);
+
 Route::post('template/name-field/update', [TemplateDetailsController::class, 'updateTemplateNameField']);
 
 Route::post('template/name-field/show', [TemplateDetailsController::class, 'showTemplateDetails']);

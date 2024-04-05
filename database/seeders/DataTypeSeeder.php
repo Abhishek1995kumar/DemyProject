@@ -10,9 +10,9 @@ class DataTypeSeeder extends Seeder {
         DB::table('data_types')->truncate();
         DB::table('data_types')->insert([
             array(
-                "data_type_name" => "string data type ([a-zA-Z_]{2,})",
+                "data_type_name" => "string data type",
                 "data_type_value" => "string",
-                'comments' => 'String equivalent to the table, please select atleast 2 characters',
+                'comments' => 'String equivalent to the table, please select atleast 2 characters ([a-zA-Z_]{2,})',
                 "status" => 1,
                 "created_at" => now(),
                 "updated_at" => now(),
@@ -72,15 +72,15 @@ class DataTypeSeeder extends Seeder {
             //     "updated_at" => now(),
             //     "deleted_at" => NULL,
             // ),
-            array(
-                "data_type_name" => "longText data type",
-                "data_type_value" => "longText",
-                'comments' => 'Long Text equivalent to the table like array',
-                "status" => 1,
-                "created_at" => now(),
-                "updated_at" => now(),
-                "deleted_at" => NULL,
-            ),
+            // array(
+            //     "data_type_name" => "longText data type",
+            //     "data_type_value" => "longText",
+            //     'comments' => 'Long Text equivalent to the table like array',
+            //     "status" => 1,
+            //     "created_at" => now(),
+            //     "updated_at" => now(),
+            //     "deleted_at" => NULL,
+            // ),
             array(
                 "data_type_name" => "integer data type",
                 "data_type_value" => "integer",
@@ -91,14 +91,23 @@ class DataTypeSeeder extends Seeder {
                 "deleted_at" => NULL,
             ),
             array(
-                "data_type_name" => "float data type",
-                "data_type_value" => "float",
+                "data_type_name" => "Array data type",
+                "data_type_value" => "array",
                 'comments' => 'float equivalent to the table',
                 "status" => 1,
                 "created_at" => now(),
                 "updated_at" => now(),
                 "deleted_at" => NULL,
             ),
+            // array(
+            //     "data_type_name" => "float data type",
+            //     "data_type_value" => "float",
+            //     'comments' => 'float equivalent to the table',
+            //     "status" => 1,
+            //     "created_at" => now(),
+            //     "updated_at" => now(),
+            //     "deleted_at" => NULL,
+            // ),
             // array(
             //     "data_type_name" => "boolean data type",
             //     "data_type_value" => "boolean",

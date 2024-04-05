@@ -1,0 +1,389 @@
+public function getTemplatePayloadDetails(Request $request) {
+    $rules = [
+        'data' => 'array',
+        'template_id' => 'required|exists:template_names,id',
+    ];
+
+    $messages = [
+        'data.array' => 'Data field should be an array.',
+        'template_id.required' => 'Template id is required.',
+        'template_id.exists' => 'Invalid template id.',
+    ];
+
+    $validator = Validator::make($request->all(), $rules, $messages);
+    
+    if ($validator->fails()) {
+        return response()->json([
+            'status' => false,
+            'errors' => $validator->errors()
+        ]);
+    }
+    
+    $templateDetails = TemplateFields::where('template_name_id', $request->template_id)->get();
+    
+    if ($templateDetails->isEmpty()) { 
+        return response()->json([
+            'status' => false,
+            'error' => "No template fields found for the given template id.",
+        ]);
+    }
+
+    $errors = [];
+    foreach ($templateDetails as $field) {
+        $fieldName = $field->field_name;
+
+        // Check if the field exists in the payload
+        if (!isset($request->payload[$fieldName])) {
+            $errors[] = [
+                'field_name' => $fieldName,
+                'error' => 'Field is mandatory but missing in payload.'
+            ];
+            continue;
+        }
+
+        // Fetch data type and validation from the database
+        $dataType = DataType::find($field->data_type_id);
+        $validation = Validation::find($field->validation_id);
+
+        // Compare data type
+        if ($dataType && gettype($request->payload[$fieldName]) !== $dataType->data_type_value) {
+            $errors[] = [
+                'field_name' => $fieldName,
+                'error' => 'Data type is not matching.'
+            ];
+        }
+
+        // Compare validation rule
+        if ($validation && !preg_match('/' . $validation->validation_value . '/', $request->payload[$fieldName])) {
+            $errors[] = [
+                'field_name' => $fieldName,
+                'error' => 'Validation error.'
+            ];
+        }
+    }
+
+    if (!empty($errors)) {
+        return response()->json([
+            'status' => false,
+            'errors' => $errors
+        ]);
+    }
+
+    // If everything is valid, save payload data
+    // Sample code to save payload data
+    $templatePayloadData = new TemplatePayloadData();
+    $templatePayloadData->template_name_id = $request->template_id;
+    $templatePayloadData->data = json_encode($request->payload); // Assuming you want to store payload data as JSON
+    $templatePayloadData->save();
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Template payload is saved successfully'
+    ]);
+}
+
+
+
+                    //  condition check properly
+                    // if(empty($templateIsMandatory) && ) {
+                    //     $errors[] = [
+                    //         "field_name" =>  $fieldName,
+                    //         'error' => "Field $fieldName is mandatory but missing $fieldName"
+                    //     ];
+                    // }
+
+
+
+postman value -- {
+    "template_id": 7,
+	"fn": "dzddsa",
+	"ln": "kumar",
+	"contact": "9785446432"
+}
+
+
+CREATE TABLE `template_field_details` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `validation_id` bigint(20) UNSIGNED NOT NULL COMMENT 'Validation table id',
+  `data_type_id` bigint(20) UNSIGNED NOT NULL COMMENT 'Data type table id',
+  `template_name_id` bigint(20) UNSIGNED DEFAULT NULL COMMENT 'Template Name table id',
+  `field_name` varchar(255) NOT NULL COMMENT 'Name of user',
+  `is_mandatory` tinyint(4) NOT NULL DEFAULT 1 COMMENT '1=Field is mandatory, 2=Field is not mandatory',
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+
+public function getTemplatePayloadDetails(Request $request) {
+    $rules = [
+        'data' => 'array',
+        'template_id' => 'required|exists:template_names,id',
+    ];
+
+    $messages = [
+        'data.array' => 'Data field should be an array.',
+        'template_id.required' => 'Template id is required.',
+        'template_id.exists' => 'Invalid template id.',
+    ];
+
+    $validator = Validator::make($request->all(), $rules, $messages);
+    
+    if ($validator->fails()) {
+        return response()->json([
+            'status' => false,
+            'errors' => $validator->errors()
+        ]);
+    }
+    
+    $templateDetails = TemplateFields::where('template_name_id', $request->template_id)->get();
+    
+    if ($templateDetails->isEmpty()) { 
+        return response()->json([
+            'status' => false,
+            'error' => "No template fields found for the given template id.",
+        ]);
+    }
+
+	$errors= [];
+	$templateIsMandatory = $templateDetails->pluck('is_mandatory')->toArray();
+	$templateDatabaseValidation = $templateDetails->pluck('validation_id')->toArray();
+	$templateDatabaseValidation = $templateDetails->pluck('validation_id')->toArray();
+	$requestFieldName = array_diff(array_keys($request->except('template_id')), ['template_id']);   
+	$requestFieldValue = array_values($request->all());
+
+	foreach($templateDetails as $allDetails) {
+		$validation = Validation::find($allDetails->validation_id);
+		$dataType = DataType::find($allDetails->data_type_id);
+		$expectedDataType = $dataType->data_type_value;
+		$fieldName = $allDetails->field_name;
+
+		// if is_mandatory==1 than check missing field condition and if is_mandatory==2 than pass missing field validation
+		if($templateIsMandatory == 1) {
+			if(!in_array($fieldName, $requestFieldName)) {
+				$errors[] = [
+					"field_name" =>  $fieldName,
+					'error' => "Field $fieldName is missing in the request"
+				];
+			}
+		}
+
+		// data type condition check properly
+		// return $request->all([$fieldName]); // getting single key and value from request
+		// return $request->$fieldName; // getting value from request
+		if(array_key_exists($fieldName,$request->all()) && $expectedDataType != gettype($request->$fieldName)) {
+			$errors[] = [
+				"field_name" =>  $fieldName,
+				'error' => "Invalid data type for field $fieldName. Expected {$expectedDataType}."
+			];
+		}
+
+		// validation condition check properly
+		if($validation && !empty($validation->validation_value)) {
+			if(!Validator::make([$request->all([$fieldName])], [$fieldName => $validation->validation_value])->passes()) {
+				$errors[] = [
+					"field_name" =>  $fieldName,
+					'error' => "Validation failed for field $fieldName"
+				];
+			}
+		}
+	}
+
+	if(!empty($errors)) {
+		return response()->json($errors);
+	}
+
+	$templatePayloadData = new TemplatePayloadData();
+	$templatePayloadData->template_name_id = $request->template_id;
+	$templatePayloadData->data = $request->all();
+	// $templatePayloadData->save();
+}
+
+in postman field, if "fn" or "ln" or "contact" field is not mandatory than without putiing data in  "fn" or "ln" or "contact" field and save in databse but  "fn" or "ln" or "contact" is manadatory field than without putting value getting error
+
+
+
+
+
+
+
+
+
+
+
+
+template_id:2
+employee_fname:fdsaddada
+employee_lname:47687878787454545
+employee_code:fssfssfs
+employee_contact:
+//employee_department:kjhfdjkhfd
+//employee_dob:9999-12-31
+//employee_doj:9999-12-31
+employee_salary:45873
+employee_email:annaaryan98@gmail.com
+//employee_address:New Delhi
+//employee_acc_no:34825655725
+employee_ifsc_code:SBIN00003738
+//employee_aadhar_card:44879965989
+//employee_experience_level:2
+
+
+
+
+
+
+
+
+
+
+    public function getTemplatePayloadDetails(Request $request) {
+        try {
+            $rules = [
+                'data' => 'array',
+                'template_id' => 'integer|exists:template_names,id',
+            ];
+
+            $message = [
+                'data' => 'Data field is like array, please use the valid data type',
+                'template_id' => 'Template id field is required, please select a template id'
+            ];
+
+            $validator = Validator::make($request->all(), $rules, $message);
+            
+            if($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $validator->errors()
+                ]);
+            }
+
+            $templateDetails = TemplateFields::where('template_name_id', $request->template_id)->get();
+            
+            if(empty($templateDetails)) { 
+                return response()->json([
+                    'status' => false,
+                    'error' => "No template fields found for the given template id",
+                ]);
+            }
+
+            if($request->has('payload')) {
+                $errors= [];
+                foreach($templateDetails as $payload) {
+                    $templateIsMandatory = $payload->is_mandatory;
+                    return $templateIsMandatory
+                    $dataType = DataType::find($payload->data_type_id);
+                    $validation = Validation::find($payload->validation_id);
+                    $actualType = gettype($request->payload[$payload->field_name]);
+                    $requestValue = $request->payload[$payload->field_name];
+                    $actualType = gettype($requestValue);
+
+                    if ($templateIsMandatory == 1 && !in_array($payload->field_name, array_keys($request->payload))) {
+                        $errors[] = [
+                            "field_name" => $payload->field_name,
+                            'error' => "Field is mandatory but missing in $payload->field_name"
+                        ];
+                    }
+
+                    // if ($dataType->data_type_value !== $actualType) {
+                    //     $errors[] = [
+                    //         'field_name' => $payload->field_name,
+                    //         'error' => "Data type is not matching. Database : $dataType->data_type_value, Request payload : $actualType"
+                            
+                    //     ];
+                        
+                    // }
+
+                    // if ($validation && !empty($validation->validation_value)) {
+                    //     if (!Validator::make([$payload->field_name => $request->payload[$payload->field_name]], [$payload->field_name => $validation->validation_value])->passes()) {
+                    //         $errors[] = [
+                    //             "field_name" => $payload->field_name,
+                    //             "error" => "Validation failed for $payload->field_name"
+                    //         ];
+                    //     }
+                    // }
+
+                    // if($validation->validation_value !==  $requestValue) {
+                    //     $errors[] = [
+                    //         "field_name" => $payload->field_name,
+                    //         "error" => "$payload->field_name field is mandatory but missing in $payload->field_name"
+                    //     ]; 
+                    // }
+
+                    // if($payload->is_mandatory == 1 && !isset($payload->is_mandatory)) {
+                    //     $errors[] = [
+                    //         "field_name" => $payload->field_name,
+                    //         "error" => "$payload->field_name field is mandatory but missing in $payload->field_name"
+                    //     ]; 
+                    // } 
+                }
+
+            } else {
+                $errors= [];
+                $requestFieldName = array_diff(array_keys($request->except('template_id')), ['template_id']);
+                foreach($templateDetails as $allDetails) {
+                    $fieldName = $allDetails->field_name;
+                    $templateIsMandatory = $allDetails->is_mandatory;
+                    $validation = Validation::find($allDetails->validation_id);
+                    $dataType = DataType::find($allDetails->data_type_id);
+                    $expectedDataType = $dataType->data_type_value;
+
+                    if($templateIsMandatory == 1 && !isset($request->$fieldName)) {
+                        $errors[] = [
+                            "field_name" =>  $fieldName,
+                            'error' => "Field $fieldName is mandatory."
+                        ];
+                    }
+
+                    // if field miss match condition
+                    if($templateIsMandatory == 1 && !in_array($fieldName, $requestFieldName)) {
+                        $errors[] = [
+                            "field_name" =>  $fieldName,
+                            'error' => "Field $fieldName is missing in the request"
+                        ];
+                    }
+
+                    // data type condition check properly
+                    // return $request->all([$fieldName]); // getting single key and value from request
+                    // return $request->$fieldName; // getting value from request
+                    if(array_key_exists($fieldName,$request->all()) && $expectedDataType != gettype($request->$fieldName)) {
+                        $errors[] = [
+                            "field_name" =>  $fieldName,
+                            'error' => "Invalid data type for field $fieldName. Expected {$expectedDataType}."
+                        ];
+                    }
+
+                    // validation condition check properly
+                    if($validation && !empty($validation->validation_value)) {
+                        if(!Validator::make([$request->all([$fieldName])], [$fieldName => $validation->validation_value])->passes()) {
+                            $errors[] = [
+                                "field_name" =>  $fieldName,
+                                'error' => "Validation failed for field $fieldName"
+                            ];
+                        }
+                    }  
+                }
+            }
+
+            if(!empty($errors)) {
+                return response()->json([
+                    'status' => false,
+                    'errors' => $errors
+                ]);  
+            }
+
+            $templatePayloadData = new TemplatePayloadData();
+            $templatePayloadData->template_name_id = $request->template_id;
+            $templatePayloadData->data = $request;
+            // $templatePayloadData->save();
+
+            return response()->json([
+               'status' => true,
+               'message' => 'Template payload is saved successfully',
+            ]);
+
+        } catch(Exception $e) { 
+            return response()->json([
+                'status' => false,
+                'errors' => $e->getMessage(),
+                Log::info($e->getMessage(), [$e->getTraceAsString()])
+            ]);
+        }
+    }
+
